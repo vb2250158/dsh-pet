@@ -89,15 +89,13 @@ async function boot() {
   }
 }
 
-// 注入打字资源：气泡字体 + 点击/拖拽光标图标（与浏览器 overlay 同一套素材，host 经 /dsh-pet-7340/ 提供）
+// 注入打字资源：DSH 默认字体 + 点击/拖拽光标图标（与浏览器 overlay 同一套素材，host 经 /dsh-pet-7340/ 提供）
 function injectAssets() {
   const style = document.createElement('style');
   style.textContent =
-    '@font-face{font-family:"ShangshouSoftCandy";src:url("' +
-    BASE +
-    '/font/' +
-    encodeURIComponent('上首软糖体') +
-    '.ttf") format("truetype");font-display:swap;font-weight:400}' +
+    ':root,.pet-bubble{' +
+    S.PET_TEXT_CSS +
+    '}' +
     '.pet-hit{cursor:url("' +
     BASE +
     '/pic/cursor-grab.png") 16 16, grab}' +

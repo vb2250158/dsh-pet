@@ -63,7 +63,7 @@
         cursor: grabbing;
       }
       /* 余额气泡：与浏览器 overlay 同一套视觉（白色圆润泡 + 峰/谷/错误着色），
-         尺寸随宠物宽度 var(--pet-size) 等比缩放；字体经 renderer 注入上首软糖体 @font-face */
+         尺寸随宠物宽度 var(--pet-size) 等比缩放；字体由 renderer 注入 DSH 默认字体 */
       .pet-bubble {
         position: absolute;
         left: 50%;
@@ -73,11 +73,9 @@
         max-width: calc(var(--pet-size, 462px) * 0.5);
         padding: calc(var(--pet-size, 462px) * 0.022) calc(var(--pet-size, 462px) * 0.03);
         border-radius: calc(var(--pet-size, 462px) * 0.035);
-        background: rgba(255, 255, 255, 0.92);
-        color: #2b2b2b;
-        font-family:
-          'ShangshouSoftCandy', 'Yuanti SC', 'YouYuan', '幼圆', 'Comic Sans MS', 'PingFang SC', 'Microsoft YaHei',
-          sans-serif;
+        background: var(--dsh-pet-bubble-fill, rgba(255, 255, 255, 0.98));
+        color: var(--dsh-pet-bubble-text, #111);
+        font-family: inherit;
         font-size: calc(var(--pet-size, 462px) * 0.0455);
         line-height: 1.6;
         z-index: 3;
@@ -96,7 +94,7 @@
         bottom: calc(var(--pet-size, 462px) * -0.017);
         transform: translateX(-50%);
         border: calc(var(--pet-size, 462px) * 0.017) solid transparent;
-        border-top-color: rgba(255, 255, 255, 0.92);
+        border-top-color: var(--dsh-pet-bubble-fill, rgba(255, 255, 255, 0.98));
         border-bottom: none;
       }
       .pet-bubble.is-on {
@@ -105,7 +103,7 @@
       /* 碎碎念变体：与浏览器 overlay 一致 —— 字号缩到余额气泡的 0.75、取消 nowrap 允许换行、
          宽度随文字数量自适应（短句窄框、长句封顶绕行），高度随行数自然增长 */
       .pet-bubble.is-whisper {
-        font-size: calc(var(--pet-size, 462px) * 0.034);
+        font-size: max(12px, calc(var(--pet-size, 462px) * 0.034));
         min-width: calc(var(--pet-size, 462px) * 0.1);
         max-width: calc(var(--pet-size, 462px) * 0.5);
         white-space: normal;

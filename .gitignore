@@ -1,0 +1,5 @@
+node_modules/
+lib/
+runtime/electron-helper/shared-core.js
+*.tgz
+.env

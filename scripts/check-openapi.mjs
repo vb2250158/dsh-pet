@@ -4,7 +4,7 @@
 //   3. 路径/操作/响应结构符合 OpenAPI 3.1 基本要求
 //   4. 文档里列出的每条路径都真实存在于 host 路由实现里（防止文档漂移）
 //
-// 路径一律从本文件位置解析（不依赖 CWD）：openapi.yaml 在仓库根，本文件在 dsh-pet/scripts/。
+// 路径一律从本文件位置解析（不依赖 CWD）：openapi.yaml 在包根，本文件在 scripts/。
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -14,7 +14,7 @@ const require = createRequire(import.meta.url);
 const yaml = require('js-yaml');
 
 const HERE = dirname(fileURLToPath(import.meta.url)); // dsh-pet/scripts
-const SPEC_PATH = join(HERE, '..', '..', 'openapi.yaml'); // 仓库根
+const SPEC_PATH = join(HERE, '..', 'openapi.yaml'); // 仓库根
 const HOST_SRC = join(HERE, '..', 'src', 'host', 'index.ts');
 
 const doc = yaml.load(readFileSync(SPEC_PATH, 'utf8'));

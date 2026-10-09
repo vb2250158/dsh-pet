@@ -1,3 +1,4 @@
+import { PET_TEXT_CSS } from './typography';
 // 点击积分弹窗 + 粒子爆发（src/shared —— menu.ts / chat.ts 之后第三个「两端共用同一份 DOM」例外）：
 //   - 纯逻辑（达标阈值 / 分数映射）在 score.ts，本文件只做渲染：
 //   - spawnScoreBurst(x, y)：点击处爆开一圈暖色小圆点（重力下落 + 淡出），rAF 驱动、自动清理；
@@ -14,7 +15,7 @@ export const SCORE_POPUP_CSS = [
   '.dsh-pet-score{position:fixed;z-index:2147483002;min-width:120px;text-align:center;',
   'background:rgba(255,255,255,.97);border:1px solid rgba(255,179,0,.35);border-radius:12px;',
   'box-shadow:0 10px 32px rgba(0,0,0,.22);padding:8px 16px 9px;user-select:none;pointer-events:auto;',
-  "font-family:'ShangshouSoftCandy','Yuanti SC','YouYuan','幼圆','Comic Sans MS','PingFang SC','Microsoft YaHei',sans-serif;}",
+  PET_TEXT_CSS + '}',
   '.dsh-pet-score.is-in{animation:dshPetScorePop .28s ease}',
   '.dsh-pet-score-val{font-size:22px;line-height:1.25;font-weight:700;color:#ff8f00;font-variant-numeric:tabular-nums}',
   '.dsh-pet-score-sub{font-size:11px;line-height:1.4;color:rgba(43,43,43,.6);margin-top:2px;white-space:nowrap}',

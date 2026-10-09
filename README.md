@@ -1,5 +1,9 @@
 # dsh-pet 🐾
 
+本 fork 基于 [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet) 的 `v0.3.6`。`main` 保留上游仓库；`codex/pet-typography` 将上游 `dsh-pet/` 包目录放在根目录，供固定 Git 提交安装。气泡、对话框与积分卡片继承 DSH 默认字体，碎碎念至少 12px，气泡使用深色文字与 98% 不透明白底。保留原作者署名及 MIT 许可，动画与聊天行为沿用上游。
+
+This fork is based on [PC2005-cloud/dsh-pet](https://github.com/PC2005-cloud/dsh-pet) `v0.3.6`. `main` preserves the upstream repository; `codex/pet-typography` exposes the upstream `dsh-pet/` package at the root for installation from a pinned Git commit. Bubbles, dialogs and score cards follow DSH typography, with self-talk at least 12px and dark text over 98% opaque white. Upstream attribution, the MIT license, animation and chat behavior are preserved.
+
 <p align="center">
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-pet?label=npm&color=blue"></a>
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm monthly downloads" src="https://img.shields.io/npm/dm/dsh-pet?label=%E6%9C%88%E4%B8%8B%E8%BD%BD&color=brightgreen"></a>
