@@ -26,6 +26,14 @@ AI 生成动画的配方     源视频 → 透明动画的管线    运行在 DS
 
 ---
 
+## 本 fork 的 Git 安装
+
+本仓库根 `package.json` 转发到 `dsh-pet/` 的同一份构建产物，支持 DSH 官方安装器的固定提交 Git 来源。维护代码仍在 `dsh-pet/`；根包的 `prepack` 使用子包已有构建与检查链，不包含提示词和视频生成工程。版本记录见 [CHANGELOG.md](CHANGELOG.md)。原作者、MIT 许可、插件配置及宠物记忆保持原归属。
+
+```sh
+dsh plugin --profile web add --save-exact github:vb2250158/dsh-pet#<40位提交>
+```
+
 ## 快速开始（安装插件）
 
 > 以下命令都在你的**命令行终端**（PowerShell / CMD 等）中运行。前提是 DSH 环境已就绪：

@@ -1,3 +1,4 @@
+import { PET_TEXT_CSS } from './typography';
 // 对话输入弹窗（src/shared，浏览器 bundle 与桌面 shared-core 共用）：
 //  - 纯逻辑：类型 / 发送（走 host /dsh-pet-7340/chat，host 是 memory.json 唯一读写方
 //    —— 浏览器与桌面同一实例天然共享同一份记忆，两端只是不同显示方式）；
@@ -51,8 +52,7 @@ export const CHAT_CSS = [
   '.dsh-pet-chat{position:fixed;z-index:2147483001;width:160px;max-width:80vw;',
   'background:rgba(255,255,255,.98);border:1px solid rgba(0,0,0,.12);border-radius:10px;',
   'box-shadow:0 10px 32px rgba(0,0,0,.22);color:#2b2b2b;font-size:14px;line-height:1.5;',
-  // 字体与桌宠气泡同款（上首软糖体，两端均已注入 @font-face），风格一致不显正式
-  "font-family:'ShangshouSoftCandy','Yuanti SC','YouYuan','幼圆','Comic Sans MS','PingFang SC','Microsoft YaHei',sans-serif;",
+  PET_TEXT_CSS,
   'user-select:none}',
   '.dsh-pet-chat *{box-sizing:border-box}',
   '.dsh-pet-chat-input{display:block;width:100%;border:none;outline:none;background:transparent;',

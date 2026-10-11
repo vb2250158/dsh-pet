@@ -2,6 +2,7 @@
 // 自身不发起请求；工厂形态与 pet.ts 一致（react 由 DSH 运行时注入）。
 // 内容（文案/档位/数学）来自 src/shared/balance.ts 的 balanceBubbleView ——
 // 与桌面模式共用同一份行数据，本文件只负责把行数据映射成 React 节点。
+import { PET_TEXT_CSS } from '../shared/typography';
 import { balanceBubbleView, type BalanceBubbleRow, type BalanceState } from '../shared/balance';
 import {
   MEME_BUBBLE_CLASS,
@@ -13,30 +14,29 @@ import {
 import type { ReactNode } from 'react';
 import type { jsx } from 'react/jsx-runtime';
 
-/** 气泡内联样式：白色半透明圆润泡 + 底部小尾巴指向宠物；字体用上首软糖体（本地打包，稳定）。
+/** 气泡内联样式：白色半透明圆润泡 + 底部小尾巴指向宠物；字体继承 DSH 默认字体。
  * 所有尺寸基于 `--dsh-pet-size`（宠物宽度 px）等比缩放——宠物放大/缩小，气泡跟随。
  * 系数按默认 462px 设计：21px 字号 → ×0.0455、120px 最小宽 → 0.26、230px 最大宽 → 0.5 等。 */
 const bubbleCss = [
-  // 本地字体：/dsh-pet-7340/font/ 由 host 从 assets/fonts 提供；font-display swap 先回退后切换
-  '@font-face{font-family:"ShangshouSoftCandy";src:url("/dsh-pet-7340/font/上首软糖体.ttf") format("truetype");font-display:swap;font-weight:400}',
   '.dsh-pet-bubble{position:absolute;left:50%;transform:translateX(-50%);' +
     'bottom:calc(100% - var(--dsh-pet-size)*0.108);' +
     'min-width:calc(var(--dsh-pet-size)*0.26);max-width:calc(var(--dsh-pet-size)*0.5);' +
     'padding:calc(var(--dsh-pet-size)*0.022) calc(var(--dsh-pet-size)*0.030);' +
     'border-radius:calc(var(--dsh-pet-size)*0.035);' +
-    'background:rgba(255,255,255,.92);' +
-    'color:#2b2b2b;font-family:"ShangshouSoftCandy","Yuanti SC","YouYuan","幼圆","Comic Sans MS","PingFang SC","Microsoft YaHei",sans-serif;' +
+    'background:var(--dsh-pet-bubble-fill,rgba(255,255,255,.98));' +
+    'color:var(--dsh-pet-bubble-text,#111);' +
+    PET_TEXT_CSS +
     'font-size:calc(var(--dsh-pet-size)*0.0455);line-height:1.6;z-index:3;pointer-events:none;' +
     'box-shadow:0 calc(var(--dsh-pet-size)*0.009) calc(var(--dsh-pet-size)*0.035) rgba(0,0,0,.14),0 1px 3px rgba(0,0,0,.08);' +
     'backdrop-filter:blur(6px);opacity:0;transition:opacity .25s ease;white-space:nowrap}',
   // 底部尾巴：小三角指向下方宠物（同样随宠物缩放）
   '.dsh-pet-bubble::after{content:"";position:absolute;left:50%;bottom:calc(var(--dsh-pet-size)*-0.017);' +
     'transform:translateX(-50%);border:calc(var(--dsh-pet-size)*0.017) solid transparent;' +
-    'border-top-color:rgba(255,255,255,.92);border-bottom:none}',
+    'border-top-color:var(--dsh-pet-bubble-fill,rgba(255,255,255,.98));border-bottom:none}',
   '.dsh-pet-bubble.is-on{opacity:1}',
   // 碎碎念变体：字号缩到余额气泡的 0.75（0.0455→0.034）、取消 nowrap 允许换行、
   // 宽度随文字数量自适应（短句窄框、长句封顶绕行），高度随行数自然增长
-  '.dsh-pet-bubble.dsh-pet-whisper{font-size:calc(var(--dsh-pet-size)*0.034);' +
+  '.dsh-pet-bubble.dsh-pet-whisper{font-size:max(12px,calc(var(--dsh-pet-size)*0.034));' +
     'min-width:calc(var(--dsh-pet-size)*0.10);max-width:calc(var(--dsh-pet-size)*0.5);' +
     'white-space:normal;overflow-wrap:anywhere}',
   // 配图（碎碎念/对话共用）：样式在 shared 的 MEME_BUBBLE_CSS（两端同一份，由
