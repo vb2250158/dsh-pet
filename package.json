@@ -1,7 +1,7 @@
 {
   "name": "dsh-pet",
-  "version": "0.3.7-fork.2",
-  "description": "吃白饭的蓝色大肥鱼，赖在 DeepSeek Harness 里不走了。平时爱玩魔方、爱吃各种零食、偶尔打个盹，闲不住就在桌面上溜达两圈，被你拖来甩去也照旧赖着；你忙起来它跟着忙前忙后，也会帮你打理余额钱包，闲下来爱碎碎念，还乐意陪你唠两句。",
+  "version": "0.3.7-fork.3",
+  "description": "Display a draggable animated pet with companion chat, speech bubbles and wallet management.",
   "icon": "dsh-pet/assets/logo.png",
   "keywords": [
     "dsh",
@@ -38,7 +38,8 @@
     },
     "./src/*": "./dsh-pet/src/*",
     "./cordis.patch.yml": "./dsh-pet/cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "dsh-pet/lib",
@@ -51,7 +52,8 @@
     "dsh-pet/assets/config.jsonc",
     "dsh-pet/assets/logo.png",
     "dsh-pet/scripts/ensure-electron.mjs",
-    "dsh-pet/cordis.patch.yml"
+    "dsh-pet/cordis.patch.yml",
+    "locale"
   ],
   "scripts": {
     "build": "npm --prefix dsh-pet run build",

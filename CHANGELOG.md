@@ -19,3 +19,9 @@
 - Bubble text uses `#111` over 98% opaque white, including the matching tail.
 - Self-talk text stays at least 12px in browser and desktop modes.
 - The installable package directory is extracted from upstream `v0.3.6`, preserving the MIT license and attribution.
+
+## 0.3.7-fork.3 · 插件列表语言 / Plugin list language
+
+插件列表中的名称和描述随 DSH 的中文、英文语言设置切换。
+
+Plugin list names and descriptions follow the DSH Chinese or English language setting.
