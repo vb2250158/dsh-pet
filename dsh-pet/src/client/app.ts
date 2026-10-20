@@ -2,6 +2,7 @@
 // 页面代码不在本文件：宠物页面在 pet.ts，设置页在 settings.ts——
 // 类似 Vue 的 App.vue 只挂根组件、SpringBoot 启动类只做装配，不写页面业务。
 import { makePetUI } from './pet';
+import { readPose } from './pose';
 import { makePetConfigSection, NS, zh, en, petBridge } from './settings';
 import { initNotify } from './notify';
 import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces';
@@ -19,7 +20,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     const module = { exports: {} };
 
     const react: typeof ReactNS = require('react');
-    const { useEffect, useRef, useState } = react;
+    const { useEffect, useRef, useState, useCallback } = react;
     const { jsx: h } = require('react/jsx-runtime');
 
     // 平台种子模块（DSH web 前端壳提供，与 react / cordis 并列）：取不到就退化成
@@ -67,6 +68,16 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       // 本地化字典（设置页文案）
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-pet: dictionaries');
       const t = ctx.locale.bind(NS);
+
+      // 「实况」只读服务（issue #122 第 1 条）：让**同页的第三方客户端插件**按需读这一页里某只
+      // 宠物的实时位置/朝向——页面内读内存，零请求，且天然绑定"这个页面里的这只"（网页端的位置
+      // 天生每个页面一份，塞进宿主快照语义上就是错的）。
+      //
+      // 桌面端那条路是 `GET /pose`（宿主快照）；两边**字段名与坐标口径完全一致**，只是取法不同。
+      // **只开读**：让它播什么、停什么仍走 HTTP 接口，避免控制出现两条通道（契约分叉）。
+      // 服务名用裸词（与 connection / slots / commandUi 同一风格），消费者用
+      // `ctx.get('petPose')` 探测——拿不到就是老版本，不抛。
+      ctx.provide('petPose', { pose: readPose });
 
       // 系统通知：host 侧监听 DSH 宿主事件生成通知帧，写进 /state 的 sections.notify；
       // 容器的统一轮询发现 counter 变化后调 notifyFromFrame 弹 toast（本引擎不再自己轮询）。
@@ -149,7 +160,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
 
       // 设置页：「桌宠配置」（大小/位置/模型，保存即时生效）。
       // useRef 用于「AI 模型」单下拉选择器（浮层定位与外部点击判定），与宠物页面同一份注入。
-      const PetConfigSection = makePetConfigSection({ h, useState, useEffect, useRef, t });
+      const PetConfigSection = makePetConfigSection({ h, useState, useEffect, useRef, useCallback, t });
       ctx.slots.inject('settings.section', function* () {
         yield ctx.slots.register(
           { name: 'settings.section', id: 'pet-config', order: 30, label: () => t('nav'), inject: () => ({ t }) },

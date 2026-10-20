@@ -22,7 +22,7 @@
  *     （如余额周期读不到就按 1800、碎碎念按 300）；
  *   - **显式写了但非法**（类型/结构/白名单外）→ 告警 + 填内置默认值
  *     （同一 文件+字段 进程内只告警一次，避免每请求刷屏；保证返回绝不出现残缺/非法值）；
- *   - **例外：全局默认**（GLOBAL_DEFAULT_KEYS 那 9 个「用户级成本/偏好/环境/节奏」字段）——
+ *   - **例外：全局默认**（GLOBAL_DEFAULT_KEYS 那 10 个「用户级成本/偏好/环境/节奏」字段）——
  *     文件宠物条目的基座取**用户层**（main-config.jsonc）而不是内置默认，即"设置页改一次，
  *     所有宠物都生效"；种类文件仍可在自己顶层覆盖（写了就用自己那份）；
  *   - 身份字段例外（无默认可填）：id 必须存在、全局唯一（缺失/重复/非法/冲突 →
@@ -41,9 +41,27 @@ import { dirname, join } from 'node:path';
 const CORNERS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
 const CORNER_SET: ReadonlySet<string> = new Set(CORNERS);
 
-/** display 白名单 */
+/** display 白名单（导出：宿主路由 POST /pet-display 写单只宠物的显示位置时复用同一份枚举，
+ *  读写两侧必须同一份规则，不在路由里另写一个 Set） */
 const PET_DISPLAYS = ['web', 'desktop', 'both', 'none'] as const;
-const PET_DISPLAY_SET: ReadonlySet<string> = new Set(PET_DISPLAYS);
+export const PET_DISPLAY_SET: ReadonlySet<string> = new Set(PET_DISPLAYS);
+
+/** font.family 白名单（预设 id）——**必须与 src/shared/fonts.ts 的 FONT_PRESETS 保持一致**：
+ *  host 不能 import src/shared（见文件头注释的 DSH 单文件加载约束），这里是那份清单的自包含副本，
+ *  所以加/删字体预设时两边都要改。 */
+const FONT_FAMILY_SET: ReadonlySet<string> = new Set([
+  'candy',
+  'yahei',
+  'youyuan',
+  'kaiti',
+  'simsun',
+  'comic',
+  'system',
+]);
+
+/** font.size 合法区间（px，含端点）——与 src/shared/fonts.ts 的 FONT_SIZE_MIN / FONT_SIZE_MAX 同一口径 */
+const FONT_SIZE_MIN = 4;
+const FONT_SIZE_MAX = 200;
 
 /** id 禁用的字符（Windows 文件名保留符 + 控制字符，防配置值逃逸文件路径）。
  *  同时被 thumb 路由的 petId 校验复用：那里同样是"标识符不得当路径片段"。 */
@@ -65,6 +83,8 @@ export const ID_FORBIDDEN = /[\\/:\x00-\x1f]/;
  *   - `physics`：拖拽抛掷手感；`petCollision` 更是**跨宠物**行为（相撞按动量守恒弹开），
  *     按种类分在语义上站不住：两只不同种类的宠物相撞时用谁的系数？
  *   - `confineToScreen`：多屏是用户环境 / 使用习惯，不是宠物属性
+ *   - `font`：字体种类 / 字号 / 是否随宠物缩放是**看的人**的偏好，不是某个种类的属性——
+ *     同一套字体偏好用在所有宠物（含 pet pack）才符合预期
  *
  * 不在名单里的顶层字段基座仍是**内置默认**：`whisperPrompt`（人设）、`memes`（表情包）、
  * `animations` / `animationWeights`（与素材根绑定）、`workStatusTexts`（文案）——一个种类一份
@@ -72,6 +92,7 @@ export const ID_FORBIDDEN = /[\\/:\x00-\x1f]/;
  */
 const GLOBAL_DEFAULT_KEYS = [
   'physics',
+  'font',
   'confineToScreen',
   'whisperImageEnabled',
   'chatImageEnabled',
@@ -203,6 +224,25 @@ function scanPetFiles(petDir: string): PetFileEntry[] {
     .map((name) => ({ prefix: name.replace(/-config\.(json|jsonc)$/, ''), path: join(petDir, name) }));
 }
 
+/**
+ * 按条目 key（= 文件名前缀 = 素材根）定位**文件宠物**的实际文件与磁盘原对象。
+ *
+ * 用途：写路径（POST /pet-display）改某只文件宠物的 display 时，既要写回**它自己的**配置文件，
+ * 也要拿该文件的 existing 去做「透传保留」——否则文件里用户手改的 whisperPrompt / animations /
+ * memes 等非白名单字段会被 saveUserConfig 的白名单重建整份抹掉（与 main 层 readUserConfig
+ * 同一套语义，见其注释里的老 bug 说明）。
+ *
+ * 文件名可能是 `<前缀>-config.json` 或 `.jsonc`（与 scanPetFiles 同一套规则，不在这里重复写死
+ * 扩展名——写错扩展名就会新建一个空配置，用户那只宠物反而"没被改到"）。前缀不存在 → undefined。
+ */
+export function readPetConfigEntry(
+  paths: ConfigPaths,
+  entry: string,
+): { path: string; raw: Record<string, unknown> | undefined } | undefined {
+  const hit = scanPetFiles(paths.petDir).find((f) => f.prefix === entry);
+  return hit ? { path: hit.path, raw: readJsonc(hit.path) } : undefined;
+}
+
 /** animations 段完整性校验（与旧 assertAnimationsHost 同一套规则；不 throw，非法返回 false） */
 function animationsValid(a: unknown): boolean {
   if (!a || typeof a !== 'object') return false;
@@ -280,6 +320,18 @@ function physicsValid(value: unknown): boolean {
   );
 }
 
+/** font 段校验：family ∈ 预设白名单、size 为区间内的有限数字、followPet 为布尔。
+ *  与 physics 同口径：**整段校验**——任一子键缺失/非法即整段非法（告警 + 取默认），
+ *  不做「缺子键逐个补默认」；对象字段一律整段替换（见文件头合并规则）。 */
+function fontValid(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const f = value as Record<string, unknown>;
+  if (typeof f.family !== 'string' || !FONT_FAMILY_SET.has(f.family)) return false;
+  const size = Number(f.size);
+  if (!Number.isFinite(size) || size < FONT_SIZE_MIN || size > FONT_SIZE_MAX) return false;
+  return typeof f.followPet === 'boolean';
+}
+
 /** whisperModel / chatModel 段校验：{ provider, model } 两个字符串，
  *  **要么都留空（= 跟随当前对话的模型）要么都非空**——只填一半（选了服务商没选模型，或反之）
  *  会拼出"用 A 家的模型名去问 B 家"这种必然失败的组合，按非法处理（告警 + 取默认）。 */
@@ -332,6 +384,8 @@ function topFieldValid(key: string, value: unknown): boolean {
       return eventsRefreshSecValid(value);
     case 'physics':
       return physicsValid(value);
+    case 'font':
+      return fontValid(value);
     case 'whisperModel':
     case 'chatModel':
       return modelSelectionValid(value);
@@ -646,6 +700,11 @@ export function saveUserConfig(
   // 传了就按白名单写入；没传则走下面的透传保留（用户手改的值原样不动）。
   const ph = o.physics;
   if (ph !== undefined && !physicsValid(ph)) return null;
+  // font（字体种类 / 字号 / 是否随宠物缩放；设置页「外观与字体」区写的就是它）：与 physics
+  // 同一套语义——传了就整段校验后进白名单，没传则走下面的透传保留。
+  // 校验直接复用读取侧的 fontValid（family 白名单 / size 4~200 / followPet 布尔），读写同一份规则。
+  const fo = o.font;
+  if (fo !== undefined && !fontValid(fo)) return null;
   // whisperModel / chatModel（碎碎念 / 对话各自的服务商 + 模型；设置页两个下拉框写的就是它们）：
   // 与 physics 同一套语义——传了就整段校验后进白名单，没传则走下面的透传保留。
   // 落盘时归一化成 { provider, model } 两个 trim 过的字符串（请求体多带的键不写进用户层）。
@@ -674,6 +733,7 @@ export function saveUserConfig(
   if (cie !== undefined) outConfig.chatImageEnabled = cie;
   if (cts !== undefined) outConfig.confineToScreen = cts;
   if (ph !== undefined) outConfig.physics = ph;
+  if (fo !== undefined) outConfig.font = fo;
   if (wm !== undefined) outConfig.whisperModel = cleanModel(wm as Record<string, unknown>);
   if (cm !== undefined) outConfig.chatModel = cleanModel(cm as Record<string, unknown>);
   // 数值归一化落盘：请求体传 "9" 也存成 9（与读取侧 topFieldValid 的 Number() 口径一致）
@@ -689,6 +749,7 @@ export function saveUserConfig(
   if (cie !== undefined) bodyOwned.add('chatImageEnabled');
   if (cts !== undefined) bodyOwned.add('confineToScreen');
   if (ph !== undefined) bodyOwned.add('physics');
+  if (fo !== undefined) bodyOwned.add('font');
   if (wm !== undefined) bodyOwned.add('whisperModel');
   if (cm !== undefined) bodyOwned.add('chatModel');
   if (cmr !== undefined) bodyOwned.add('chatMemoryRounds');

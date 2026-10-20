@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet",
-  "version": "0.3.7-fork.3",
+  "version": "0.3.7-fork.4",
   "description": "Display a draggable animated pet with companion chat, speech bubbles and wallet management.",
   "icon": "dsh-pet/assets/logo.png",
   "keywords": [
