@@ -29,9 +29,9 @@ info:
     # 1. 拉一次统一状态（只读、零副作用，可以随便轮询）
     curl -s $BASE/state
 
-    # 2. 让 main 这只宠物立刻说一句（动作端点：只回 {ok}，内容去 /state 里取）
+    # 2. 让 main 这只宠物立刻说一句（响应里就带 text；同一份同时写进 /state）
     curl -s -X POST "$BASE/whisper?pet=main"
-    curl -s $BASE/state   # → pets.main.say.data.text
+    curl -s $BASE/state   # → pets.main.say.data.text（与上面返回的 text 逐字相同）
     ```
 
     ## 数据流：为什么有"动作端点"和"/state"两套
@@ -40,9 +40,13 @@ info:
 
     1. **数据只有一个出口**：`GET /state`。它返回宿主内存里的一份"已发布状态" S，
        里面是若干 **叶子（leaf）**，每个叶子形如 `{ counter, data }`。
-    2. **动作端点不返回数据**：`POST /balance`、`POST /whisper`、`POST /broadcast`、`POST /bubble/clear`、
-       `POST /anim`、`POST /chat` 只回 `{ ok: true }`，
-       表示"这次动作做完了"。它们在宿主内部把结果**写进 S**，调用方随后拉一拍 `/state` 就能看到。
+    2. **动作端点只回执，不搬数据**：`POST /balance`、`POST /broadcast`、`POST /bubble/clear`、
+       `POST /anim` 只回 `{ ok: true }`，表示"这次动作做完了"。它们在宿主内部把结果**写进 S**，
+       调用方随后拉一拍 `/state` 就能看到。
+
+       例外是**要生成内容的两个端点**：`POST /whisper` 与 `POST /chat` 成功时**额外带回**
+       生成的 `text`（配图时带 `image`）。这只是省一次往返，不是新增的数据出口——同一份文本
+       仍然照旧写进 S，其它消费端的行为完全不变。
     3. **`counter` 是"变了没有"的唯一信号**：它是 `Date.now()` 且**严格递增**（同毫秒连写会 +1），
        宿主重启也不会倒退。消费端只比较 `counter` 是否与自己上次记录的一致，一致就跳过渲染。
        这样前端不需要任何业务知识就能统一处理所有叶子。
@@ -238,8 +242,11 @@ paths:
       operationId: whisper
       summary: 让指定宠物立刻说一句
       description: |
-        按该宠物所属条目的 `whisperPrompt` 人设生成一句碎碎念，写入 `pets.<id>.say`。
-        这是 `POST` 动作端点，**不返回文本**——文本只有一个出口（`/state`）。
+        按该宠物所属条目的 `whisperPrompt` 人设生成一句碎碎念，写入 `pets.<id>.say`，
+        并**随响应带回**生成的文本（`text`，配图开关开着且抽到图时另有 `image`）。
+
+        - 文本仍然照旧写进 `pets.<id>.say`：其它消费端继续从 `/state` 读，返回值只是
+          让调用的这一方不必再拉一拍——两处是同一份文本，不是两个真相。
 
         - `whisperEnabled` 配置**不门控本端点**：那个字段只关自动周期碎碎念，
           手动/接口触发始终可用，不受它影响。
@@ -267,7 +274,7 @@ paths:
             application/json:
               schema:
                 oneOf:
-                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/SayResponse"
                   - $ref: "#/components/schemas/FailureResponse"
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
@@ -871,8 +878,9 @@ paths:
         调用方崩溃不会把宠物永久锁死。**没有定时器**：过期是懒判的，`/state` 叶子里的 `expiresAt`
         是唯一真相，渲染端据此**自己**解除静止（见 `LockLeaf`）。
 
-        **无锁时一切照旧**：没有占用时，5 个动作端点连 `lock` 参数都不看，行为与改造前逐字一致
-        （issue #122 最重要的边界：「没有有效联动占用时，接口不改变 pet 原有行为」）。
+        **无锁时按「有没有带 `lock`」分流**：没带 → 一切照旧，5 个动作端点行为与改造前逐字一致
+        （issue #122 最重要的边界：「没有有效联动占用时，接口不改变 pet 原有行为」）；带了但查不到锁
+        → `lock-lost` + `cause`，旧租约不能继续执行迟到请求（issue #122 第 4 点）。
       parameters:
         - $ref: "#/components/parameters/PetIdQuery"
         - $ref: "#/components/parameters/SurfaceQuery"
@@ -1030,11 +1038,11 @@ paths:
 
         **只有桌面端有这条路。** 网页端的宠物位置**天生每个页面一份**（开两个标签页时两边本来就
         不同），塞进宿主一份快照语义上就是错的（后写者覆盖先写者）——所以网页端走**页面内**的
-        Cordis 只读服务 `petPose`：
+        Cordis 只读服务 `petApi7340`：
 
         ```js
         // 同页的第三方客户端插件；拿不到 = 老版本，不抛
-        const svc = ctx.get('petPose');
+        const svc = ctx.get('petApi7340');
         const pose = svc ? svc.pose('main') : null; // → { x, y, facing } | null
         ```
 
@@ -1412,10 +1420,11 @@ paths:
       operationId: sendChat
       summary: 对指定宠物说一句话并生成回复
       description: |
-        携带历史上下文生成回复，把「问 + 答」写入记忆，并把回复写进 `pets.<id>.say`。
-        这是动作端点，**只回 `{ ok: true }`**——回复文本从 `/state` 读。
+        携带历史上下文生成回复，把「问 + 答」写入记忆，并把回复写进 `pets.<id>.say`，
+        同时**随响应带回**回复文本（`text`，生成端若选了配图则另有 `image`）。
 
-        调用方收到 `ok` 后应立刻拉一拍 `/state` 即可看到回复，无需额外等待。
+        文本仍然照旧写进 `pets.<id>.say`：其它消费端继续从 `/state` 读，返回值只是
+        让调用的这一方不必再拉一拍——两处是同一份文本，不是两个真相。
 
         - 文本会 `trim()`，空文本 → `{ ok: false, reason: 'bad-request' }`。
         - 文本超过 **2000 字** → `{ ok: false, reason: 'bad-request' }`。
@@ -1453,7 +1462,7 @@ paths:
             application/json:
               schema:
                 oneOf:
-                  - $ref: "#/components/schemas/OkResponse"
+                  - $ref: "#/components/schemas/SayResponse"
                   - $ref: "#/components/schemas/FailureResponse"
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
@@ -1982,8 +1991,9 @@ components:
       description: |
         **占用锁编号**（`POST /lock` 返回的 `lockId`，issue #122 第 4 项）。
 
-        - **当前没有占用时，这个参数一律被忽略**：既有调用方不传它照旧能用——「无锁 = 现状零变化」
-          是这一项最重要的边界（issue #122 原话：「没有有效联动占用时，接口不改变 pet 原有行为」）。
+        - **当前没有占用时**：不传它 → 照旧放行（既有调用方不动就能用，这是「不传 lock = 现状
+          零变化」那条边界）；传了它 → `lock-lost` + `cause`，因为带了编号就说明你以为自己还持有，
+          而锁已经过期 / 被释放 / 被用户抢走了。
         - 当前**有**占用时：必须传，且必须是当前生效的那个编号。没传 → `lock-required`；
           传了但不匹配 → `lock-lost`（带 `cause`）。
         - 占用期间**只有持锁者**能操作这只宠物。用户交互不受限制：用户拖拽 / 点击宠物会直接撤掉占用
@@ -2026,6 +2036,26 @@ components:
           type: boolean
           const: true
       description: 动作已完成。数据请从 `GET /state` 读取。
+
+    SayResponse:
+      type: object
+      required: [ok, text]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        text:
+          type: string
+          description: |
+            本次生成的正文。与同时写入 `pets.<id>.say` 的 `text` 是同一个变量——
+            两条出口给的是同一份文本，不存在"接口一份、状态流一份"。
+        image:
+          type: string
+          description: |
+            随文本一起显示的表情包名（条目开启了配图且池内命中时才有；否则该字段不出现）。
+      description: |
+        生成成功。文本**仍然**照旧写进 `pets.<id>.say`——其它消费端（网页、桌面、第三方监听）
+        继续从 `/state` 读；返回值只是让发起的这一方省一次往返，不改变任何现有展示链路。
 
     FailureResponse:
       type: object
@@ -2396,6 +2426,8 @@ components:
         type:
           type: string
           const: session/event
+        sessionId:
+          $ref: "#/components/schemas/NotifySessionId"
         event:
           type: object
           required: [type, data]
@@ -2426,6 +2458,8 @@ components:
         type:
           type: string
           const: approval/requested
+        sessionId:
+          $ref: "#/components/schemas/NotifySessionId"
         toolName:
           type: string
           description: 申请权限的工具名（可选）
@@ -2441,6 +2475,8 @@ components:
         type:
           type: string
           const: question/requested
+        sessionId:
+          $ref: "#/components/schemas/NotifySessionId"
         questions:
           type: array
           minItems: 1
@@ -2453,13 +2489,22 @@ components:
     AgentErrorFrame:
       type: object
       required: [type, message]
-      description: 无回合位置的生成失败（DSH 0.1.5+ 的 `agent/error` 事件）
+      description: |
+        无回合位置的生成失败（DSH 0.1.5+ 的 `agent/error` 事件）。
+        **不带 `sessionId`**：该事件载荷里没有会话标识，因此点击这类通知只叫窗口、不跳会话。
       properties:
         type:
           type: string
           const: host/agent-error
         message:
           type: string
+
+    NotifySessionId:
+      type: string
+      description: |
+        发出这条通知的会话 id（宿主从 `session/event` 的会话参数上取；取不到真 id 时该字段缺失）。
+        点击通知时网页据此跳到该会话（客户端 `uiWorkspace.openSession`）；
+        缺失（旧版宿主 / 拿不到会话位置的事件）= 只把窗口叫回前台，不做任何猜测。
 
     AnimLeaf:
       type: object

@@ -54,6 +54,7 @@ import { TOOLTIP_CLASS, TOOLTIP_CSS, TOOLTIP_GAP_RATIO, tooltipPlacement } from 
 // 对话弹窗：与桌面共用同一份组件（数据经 host /chat 读写同一份记忆）
 import { mountChatDialog } from '../shared/chat';
 import { registerPose } from './pose';
+import { registerProgress } from './progress';
 // 字体（全局配置 font）：种类 → CSS 字体栈、字号 → 最终 px。换算只在 shared 一处，
 // 与桌面端共用同一份（fontStackOf / resolveFontPx），避免两端各算一套后漂移。
 import { fontStackOf, resolveFontPx } from '../shared/fonts';
@@ -523,7 +524,7 @@ export function makePetUI(rt: {
     useEffect(() => {
       mountedRef.current = true;
       // 「实况」口子（issue #122 第 1 条）：把这一页里这只宠物的实时位置/朝向注册给 Cordis 只读
-      // 服务 `petPose`（见 ./pose）。**按需读**——消费者每次调用都走这个闭包取当前值，所以走位、
+      // 服务 `petApi7340`（见 ./pose）。**按需读**——消费者每次调用都走这个闭包取当前值，所以走位、
       // 抛掷、拖拽**中途**也能读到，不是快照。
       // 坐标与 POST /position 同一口径：宠物**中心**的归一化 0~1。
       const unregisterPose = registerPose(cfg.id, () => ({
@@ -531,11 +532,34 @@ export function makePetUI(rt: {
         y: currentCenterY() / window.innerHeight,
         facing: facingRef.current,
       }));
+      // 「播放进度」口子（issue #122 第 2 条）：侧栏要跟着视频时间走，得按帧读，做成 HTTP 就是每秒
+      // 几十次回环，所以走同一个 Cordis 入口（见 ./progress）。读的是**前台**那个 video：A/B 双缓冲
+      // 切换期间 back 元素还停在上一段的位置，读它会跳。
+      const unregisterProgress = registerProgress(cfg.id, () => {
+        const el = frontRef.current === 0 ? videoARef.current : videoBRef.current;
+        const playbackId = playingPlaybackRef.current;
+        const anim = animRef.current;
+        if (el === null) {
+          // 首帧还没挂上元素：给出可解析的零值，别让调用方拿到 undefined
+          return { playbackId, anim, currentTime: 0, duration: 0, paused: true, buffering: false };
+        }
+        // duration 在元数据就绪前是 NaN；传给第三方没法处理，统一成 0
+        const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+        return {
+          playbackId,
+          anim,
+          currentTime: el.currentTime,
+          duration,
+          paused: el.paused,
+          buffering: el.readyState < 3 || el.seeking,
+        };
+      });
       const bu = blobUrlRef.current;
       const inflight = inflightRef.current;
       return () => {
         mountedRef.current = false;
         unregisterPose(); // 卸载即摘除：口子静默失效比读到陈旧值安全
+        unregisterProgress();
         for (const c of inflight) c.abort();
         inflight.length = 0;
         stopMove();

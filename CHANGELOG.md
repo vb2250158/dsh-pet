@@ -1,5 +1,10 @@
 # Fork changes
 
+## 0.3.7-fork.5 (2026-10-20)
+
+- Merge upstream notification targeting, stale-lock rejection, playback progress, wallet selection and opt-in standalone chat configuration. Preserve fork typography, readable bubbles and existing pet memories.
+
+
 ## 0.3.7-fork.4 (2026-10-20)
 
 - Integrate upstream font settings, geometry, tray, lock, playback-receipt and desktop-liveness fixes. Keep the host font as default, high-contrast bubbles and the 12px whisper minimum in browser and desktop modes.

@@ -37,7 +37,8 @@
  *                                       每个叶子 = { counter, data }；counter 变了前端才渲染。
  *                                       只读、纯内存、零副作用（绝不在这里触发外部调用/模型生成）。
  *   /dsh-pet-7340/balance              → 余额刷新（POST 动作端点，写 S；数据从 /state 读）
- *   /dsh-pet-7340/whisper              → 让某只宠物立即说一句（POST 动作端点，写 S 的 pets.<id>.say）
+ *   /dsh-pet-7340/whisper              → 让某只宠物立即说一句（POST 动作端点，写 S 的 pets.<id>.say；
+ *                                       响应带生成的 text，配图时带 image）
  *   /dsh-pet-7340/broadcast            → 第三方投喂：把外部给定的文本写进气泡（POST 动作端点，写 S 的
  *                                       pets.<id>.say；不生成、只搬运，供宿主侧其他插件集成）。
  *                                       配图给 `image`（池内名）或 `url`（第三方自带的完整地址）二选一
@@ -48,8 +49,8 @@
  *                                       响应带 playbackId，供 /playback 查**真实回执**
  *   /dsh-pet-7340/lock                 → **占用锁**（issue #122 第 4 项，POST 动作端点）：联动演出
  *                                       期间独占这只宠物，除持锁者外全静音。`lockId` 给了 = 续期、
- *                                       没给 = 新建；回 { lockId, expiresAt }。内存态 + TTL，**无锁时
- *                                       行为与改造前逐字一致**（见 ./lock）
+ *                                       没给 = 新建；回 { lockId, expiresAt }。内存态 + TTL。
+ *                                       没带 lock 时行为与改造前逐字一致；带了但查不到锁 → lock-lost
  *   /dsh-pet-7340/lock/release         → 释放占用（POST 动作端点）：`lockId` = 持锁者收工 /
  *                                       `force` = **渲染端**报告用户接管（拖拽、点击、隐藏、关闭）。
  *                                       占用期间 5 个动作端点必须带 `?lock=<lockId>`，否则
@@ -73,7 +74,7 @@
  *                                       渲染进程 → host）。这是回执的**地基**——没有它，记录永远停在
  *                                       accepted（host 只知道"受理了"，不知道播没播完）。见 ./playback
  *   /dsh-pet-7340/chat                 → 对话与记忆（GET 最近窗口 / POST 对话并写 memory.json；
- *                                       POST 只回 {ok}，回复同样写 S 的 pets.<id>.say）
+ *                                       POST 回 {ok,text,image?}，回复同样写 S 的 pets.<id>.say）
  *   /dsh-pet-7340/font|pic             → 字体 / 通知图标素材
  *
  * 系统通知不属于宠物行为、不在这里的旧实现是：浏览器半侧 notify.ts 经 connection 事件流
@@ -100,6 +101,7 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths';
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 import { queryBalance } from './balance/index';
 import { generateWhisper } from './whisper';
+import { automaticWhisperSchedule } from './whisper-policy';
 import { generateChat, type ChatMemoryMessage } from './chat';
 import { configuredModel } from './model-selection';
 import { limitPool, pickMeme, readMemePool } from './memes';
@@ -146,6 +148,7 @@ import {
   reduceNotifyFrame,
   sessionIdOf,
   shouldNotifySession,
+  withSessionId,
   type HostNotifyFrame,
 } from './notify-events';
 import { profileNameFrom, storageEntries } from './storage-paths';
@@ -378,7 +381,7 @@ export function apply(ctx: any): void {
   });
 
   // 实况快照（issue #122 第 1 条）：桌面渲染端变化时上报，第三方用 GET /pose 读。
-  // 网页端不走这里——它的位置**天生每个页面一份**，走页面内的 Cordis 服务 `petPose`。
+  // 网页端不走这里——它的位置**天生每个页面一份**，走页面内的 Cordis 服务 `petApi7340`。
   const pose = new PoseStore();
 
   /**
@@ -490,8 +493,9 @@ export function apply(ctx: any): void {
    * 动作端点的占用门禁（`/anim`、`/broadcast`、`/position`、`/throw`、`/bubble/clear` 共用）：
    * 放行回 null，否则直接给出路由应答。抽成一个函数，是为了让"哪些接口受占用约束"只有一处可查。
    *
-   * **无锁时恒为 null**：连 `lock` 参数都不看，既有调用方一个字都不用改——这是
-   * 「无锁 = 现状零变化」（issue #122 最重要的边界）的落点。
+   * **无锁时按「有没有带 `lock`」分流**：没带 → 返回 null（既有调用方一个字都不用改）；
+   * 带了但查不到锁 → `lock-lost`，旧租约不能继续执行迟到请求。
+   * 没带这一支就是「不传 lock = 现状零变化」（issue #122 最重要的边界）的落点。
    *
    * 位置放在决策函数**之后**：`petId` 要先解析出来才知道问哪只宠物的锁，而这时还没有任何副作用
    * （没写叶子、没建播放记录、没调模型）。所以"先判锁再干活"这个意图是满足的，只是与
@@ -583,7 +587,8 @@ export function apply(ctx: any): void {
         void (async () => {
           if (await sessionHasRunningWork(sessionId)) return; // 还有活：等真正的收尾轮再弹
           const frame = reduceNotifyFrame(event as Parameters<typeof reduceNotifyFrame>[0]);
-          if (frame) pushNotifyFrame(frame);
+          // 这条延迟路径（活动门等 1.5s 确认没活了才推的「对话完成」）最常被点，同样要带会话 id
+          if (frame) pushNotifyFrame(withSessionId(frame, sessionId));
         })();
       }, NOTIFY_ACTIVITY_DELAY_MS),
     );
@@ -675,11 +680,13 @@ export function apply(ctx: any): void {
    *  调度侧的 lastWhisperAt 保证，不再需要一份 whisperCache（多端共享也由 S 天然保证）。
    *  配图（whisperImageEnabled 开启时）：从表情包池**随机抽 1 张**，把描述注入指令并随文本一起写。
    *
-   *  失败**带回真实 reason**（含 `unknown-pet`：目标宠物在"校验那次读"与这里之间被删掉了）。 */
+   *  失败**带回真实 reason**（含 `unknown-pet`：目标宠物在"校验那次读"与这里之间被删掉了）。
+   *  成功**带回生成的文本**（与同时写进叶子的那份完全相同）——调用方拿到就不必再拉一拍 /state。 */
   const publishWhisper = async (
     petId: string,
   ): Promise<
-    { ok: true } | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
+    | { ok: true; text: string; image?: string }
+    | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
   > => {
     const cfg = readAllConfig(configPaths);
     const found = findPetInstance(cfg, petId);
@@ -710,17 +717,20 @@ export function apply(ctx: any): void {
       return result;
     }
     state.writePet(petId, 'say', result.image ? { text: result.text, image: result.image } : { text: result.text });
-    return { ok: true };
+    // 文本随返回值带出，且与刚写进叶子的**是同一个变量**：两条出口给同一份文本，不是一个真相两个版本
+    return { ok: true, text: result.text, ...(result.image ? { image: result.image } : {}) };
   };
 
   /** 与某只宠物对话：截取最近记忆 → 生成回复 → 写入记忆 → 把回复写进 S 的 pets.<id>.say。
    *  供 POST /chat（动作端点）与 /chat 命令共用同一条路径（锁内读写，防两端交错写盘）。
-   *  配图（chatImageEnabled 开启时）：把表情包清单交给模型按语境选一张，命中池内才随回复写回。 */
+   *  配图（chatImageEnabled 开启时）：把表情包清单交给模型按语境选一张，命中池内才随回复写回。
+   *  成功**带回回复文本**（与同时写进叶子的那份完全相同）——调用方拿到就不必再拉一拍 /state。 */
   const chatWithPet = async (
     petId: string,
     text: string,
   ): Promise<
-    { ok: true } | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
+    | { ok: true; text: string; image?: string }
+    | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
   > =>
     withMemoryLock(async () => {
       const cfg = readAllConfig(configPaths);
@@ -759,7 +769,8 @@ export function apply(ctx: any): void {
         'say',
         generated.image ? { text: generated.text, image: generated.image } : { text: generated.text },
       );
-      return { ok: true as const };
+      // 同一份文本随返回值带出（叶子照写，不是二选一）
+      return { ok: true as const, text: generated.text, ...(generated.image ? { image: generated.image } : {}) };
     });
 
   /**
@@ -1453,8 +1464,9 @@ export function apply(ctx: any): void {
       }
     }
 
-    // 碎碎念：/dsh-pet-7340/whisper?pet=<id>（POST = 立即让桌宠新说一句，返回 {ok}）
-    // 动作端点，**不返回文本**——文本走 S 的 pets.<id>.say（碎碎念/命令气泡/对话回复同一个叶子）。
+    // 碎碎念：/dsh-pet-7340/whisper?pet=<id>（POST = 立即让桌宠新说一句，返回 {ok,text,image?}）
+    // 文本**照旧**写进 S 的 pets.<id>.say（碎碎念/命令气泡/对话回复同一个叶子），同时随响应带回——
+    // 两条出口给的是同一份文本；其它消费端（网页/桌面/第三方监听）仍从 /state 读。
     // 手动语义不受 whisperEnabled 门控：那个字段只关自动周期（与改造前一致）。
     if (rest === 'whisper') {
       if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
@@ -1464,7 +1476,13 @@ export function apply(ctx: any): void {
         const who = requirePet(url.searchParams, () => readAllConfig(configPaths), { surface: true });
         if (!who.ok) return who.res;
         const r = await publishWhisper(who.petId);
-        if (r.ok) return { kind: 'json', status: 200, obj: { ok: true } };
+        if (r.ok) {
+          return {
+            kind: 'json',
+            status: 200,
+            obj: { ok: true, text: r.text, ...(r.image ? { image: r.image } : {}) },
+          };
+        }
         // 真实 reason 原样透出（独立模式是 `provider-missing`，见 ./whisper 的联合体）——
         // 不再把一切失败糊成 generate-error，调用方据此能分清"没配模型"与"生成炸了"。
         const obj: Record<string, unknown> = { ok: false, reason: r.reason };
@@ -1719,7 +1737,7 @@ export function apply(ctx: any): void {
     //
     // 为什么只有桌面端走这条路：桌面宠物**一窗一只**，位置全局唯一一份 → 宿主快照语义干净；
     // 而网页端的位置**天生每个页面一份**（开两个标签页时两边本来就不同），塞进宿主快照必然是
-    // 错的（后写者覆盖先写者）。所以网页端走**页面内**的 Cordis 只读服务 `petPose`
+    // 错的（后写者覆盖先写者）。所以网页端走**页面内**的 Cordis 只读服务 `petApi7340`
     // （src/client/pose.ts）——两边**字段名与坐标口径完全一致**（中心点归一化 0~1，与 /position
     // 同源），只是"取"的方式不同。
     //
@@ -1870,7 +1888,7 @@ export function apply(ctx: any): void {
 
     // 对话：/dsh-pet-7340/chat?pet=<id>
     //   GET  —— 最近记忆窗口（截尾 chatMemoryRounds 轮），弹窗打开时展示（一次性读，不是轮询）
-    //   POST —— 携带历史生成回复并写入记忆；**只回 {ok}**，回复走 S 的 pets.<id>.say
+    //   POST —— 携带历史生成回复并写入记忆；回 {ok,text,image?}，回复同样写 S 的 pets.<id>.say
     // 记忆唯一读写方 = host（memory.json；浏览器/桌面两端都只是客户端）→
     // 同一实例的浏览器与桌面天然共享同一份记忆；文件全存不删，
     // 请求只截尾部 chatMemoryRounds 轮（1 轮 = 1 问 1 答；合并器已按条目填默认）。
@@ -2172,7 +2190,8 @@ export function apply(ctx: any): void {
           return;
         }
         const frame = reduceNotifyFrame(event as Parameters<typeof reduceNotifyFrame>[0]);
-        if (frame) pushNotifyFrame(frame);
+        // 帧带上"这条通知是哪条会话发出的"：点击时网页据此跳到那条会话（见 withSessionId）
+        if (frame) pushNotifyFrame(withSessionId(frame, sessionIdOf(session)));
       },
     );
     // agent/error（agent-loop dispatch.emit）：无回合位置的生成失败；0.1.5 新增，
@@ -2260,12 +2279,18 @@ export function apply(ctx: any): void {
         let min = Infinity;
         for (const pet of flattenPetList(cfg)) {
           const petId = String(pet.id ?? '');
-          if (!petId || pet.whisperEnabled !== true) continue;
+          if (!petId) continue;
           // petId 就是从**同一份 cfg** 拍平出来的，所以必然命中（findPetInstance 与 flattenPetList
           // 搜索同一集合）；查不到只可能是两者口径漂移——跳过这一拍，**不猜也不兜底 main**。
           const found = findPetInstance(cfg, petId);
           if (!found) continue;
-          const sec = whisperPeriodSec(found.conf);
+          const schedule = automaticWhisperSchedule(
+            ctx.standaloneAi,
+            pet.whisperEnabled === true,
+            whisperPeriodSec(found.conf),
+          );
+          if (!schedule.enabled) continue;
+          const sec = schedule.periodSec;
           min = Math.min(min, sec);
           if (now - (lastWhisperAt.get(petId) ?? 0) < sec * 1000) continue;
           // 占用锁：这只宠物被占用时**跳过这一拍**——不生成也不补（碎碎念是瞬时事件，过期即弃）。
