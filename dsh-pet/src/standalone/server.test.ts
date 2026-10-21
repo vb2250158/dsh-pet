@@ -9,6 +9,8 @@ import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, request as httpRequest } from 'node:http';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
+import { IncomingMessage as HttpIncomingMessage } from 'node:http';
+import { Socket } from 'node:net';
 
 import type { RegisteredRoute, StandaloneLogger } from './context.ts';
 import { createRequestListener, listenStandaloneServer } from './server.ts';
@@ -428,13 +430,12 @@ describe('HTTP boundary protects every route and settings', () => {
   });
 });
 
-test('bounded body replay preserves plugin readBody; chunked and stalled inputs never invoke handlers', async () => {
+test('bounded body replay preserves plugin readBody; chunked and stalled inputs never invoke handlers', async (context) => {
   let calls = 0;
   const server = await listenStandaloneServer({
     port: 0,
     security,
     logger: silent,
-    bodyTimeoutMs: 30,
     routes: [
       {
         kind: 'prefix',
@@ -461,25 +462,37 @@ test('bounded body replay preserves plugin readBody; chunked and stalled inputs 
     });
     assert.equal(await response.text(), '中文 body');
     assert.equal(calls, 1);
-    async function chunked(body: string): Promise<number> {
-      return new Promise((resolve, reject) => {
-        const req = httpRequest(
-          url,
-          { method: 'POST', headers: { 'X-DSH-Pet-Token': security.token, 'Transfer-Encoding': 'chunked' } },
-          (res) => {
-            res.resume();
-            resolve(res.statusCode ?? 0);
-            req.destroy();
-          },
-        );
-        req.on('error', reject);
-        req.write(body);
-      });
-    }
-    assert.equal(await chunked('x'.repeat(1024 * 1024 + 1)), 413);
-    assert.equal(await chunked('not finished'), 408);
-    assert.equal(calls, 1);
   } finally {
     await server.close();
+  }
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  const listener = createRequestListener({
+    security,
+    logger: silent,
+    bodyTimeoutMs: 30,
+    routes: [pluginLikeRoute(() => calls++)],
+  });
+  for (const body of [Buffer.alloc(1024 * 1024 + 1), Buffer.from('not finished')]) {
+    const socket = new Socket();
+    Object.defineProperty(socket, 'localPort', { value: 3080 });
+    const request = new HttpIncomingMessage(socket);
+    request.method = 'POST';
+    request.url = '/dsh-pet-7340/config';
+    request.headers = { host: '127.0.0.1:3080', 'x-dsh-pet-token': security.token, 'transfer-encoding': 'chunked' };
+    const response = new FakeRes();
+    try {
+      listener(request, response as unknown as ServerResponse);
+      request.emit('data', body);
+      assert.equal(response.status, body.length > 1024 * 1024 ? 413 : 0);
+      context.mock.timers.tick(29);
+      assert.equal(response.status, body.length > 1024 * 1024 ? 413 : 0);
+      context.mock.timers.tick(1);
+      await Promise.resolve();
+      assert.equal(response.status, body.length > 1024 * 1024 ? 413 : 408);
+      assert.equal(calls, 1);
+    } finally {
+      request.destroy();
+      socket.destroy();
+    }
   }
 });
