@@ -38,15 +38,26 @@ import {
 import { WORK_STATUS_INDEX, type WorkStatusSnapshot } from '../shared/work-status';
 import { makeBalanceBubble, makeWhisperBubble } from './bubble';
 import { clickScore, SCORE_MIN_SPEED, mountScorePopup, spawnScoreBurst } from '../shared/score-popup';
-import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD, PET_REF_WIDTH, ANIMATION_EXT } from '../shared/constants';
+import {
+  CANVAS_H,
+  FEET_Y,
+  HIT_BOX,
+  DRAG_THRESHOLD,
+  PET_REF_WIDTH,
+  ANIMATION_EXT,
+  SLINGSHOT_DOUBLE_MS,
+} from '../shared/constants';
 // 统一右键菜单：与桌面共用同一份组件（树 + 渲染 + 样式，src/shared/menu.ts）
 import {
   buildMenuTree,
+  buildMoreBranch,
   displayMenuBranch,
   mountContextMenu,
   isNoMirrorAnimation,
+  readMenuItems,
   MENU_CSS,
   type MenuLeaf,
+  type MenuMoreItem,
   type MenuNode,
 } from '../shared/menu';
 // 悬浮提示：与桌面共用同一份样式与摆位判据（替代原先挂在命中层上的原生 title 提示）
@@ -67,6 +78,7 @@ import {
   springStep,
   throwBounds,
   throwStep,
+  throwSubsteps,
   trimTrail,
   collidePet,
   bodyPixelBox,
@@ -76,6 +88,9 @@ import {
   squashScale,
   landingSquash,
   throwVelocity,
+  pullAngle,
+  slingshotPower,
+  slingshotVelocity,
   type DragSample,
   type PetCollisionSlot,
   type ThrowState,
@@ -93,9 +108,31 @@ export type RuntimePet = Pet & {
   physics: PhysicsParams;
 };
 
-/** 播放动画扩展名 = 共享常量（src/shared/constants.ts 的 ANIMATION_EXT，默认 .webm）。
- *  macOS Safari/WKWebView 需改共享常量/产物为 .mov（HEVC-with-Alpha）后自构建。 */
-const THUMB_EXT = ANIMATION_EXT;
+/** 本次会话已定论的动画扩展名（null = 尚未判断）。模块级：一次判断，整页复用。 */
+let resolvedExt: string | null = null;
+
+/** 是否该先要 mov：只有 macOS 上的 WebKit（Safari / WKWebView）需要 HEVC-with-Alpha。
+ *  **不能用 canPlayType 判断**——Safari 能播 VP9 webm 却会丢弃 alpha（表现为黑底），
+ *  「能解码」与「透明还在」是两件事，后者没有任何 Web API 可查询。 */
+const prefersMov = (): boolean => {
+  const ua = navigator.userAgent;
+  // Chromium 系（含 Electron 桌面端）与 Firefox 原生支持 VP9-alpha，不需要 mov
+  if (/Chrome|Chromium|Edg|OPR|Firefox|FxiOS/i.test(ua)) return false;
+  return /Mac/i.test(navigator.platform || ua); // 余下按 WebKit 处理，且限定 macOS
+};
+
+/** 解析本次要用的扩展名：显式常量（用户按 README 改成 .mov）优先，否则按渲染端判断。
+ *  宿主侧对缺失的 .mov 会退回同名 .webm（src/host/index.ts 的 thumb 分支），
+ *  所以这里只管「要哪一种」，无需探测素材是否真的存在。 */
+const thumbExt = (): string => {
+  if (resolvedExt === null) {
+    // ANIMATION_EXT 的静态类型被窄化成字面量 ".webm"（其默认值），但它本来就是给人改的：
+    // 按 string 读，才表达得出「用户把它改成 .mov」这条显式意图（否则 TS 判为恒不相等）。
+    const explicit: string = ANIMATION_EXT;
+    resolvedExt = explicit === '.mov' || prefersMov() ? '.mov' : '.webm';
+  }
+  return resolvedExt;
+};
 
 /** 余额气泡展示时长（ms）：定时自动消失，与动画生命周期解耦 */
 const BUBBLE_DURATION_MS = 10 * 1000;
@@ -155,8 +192,8 @@ export function makePetUI(rt: {
   const { h, useState, useEffect, useRef } = rt;
   injectCss();
 
-  /** 余额气泡（哑组件：数据与显隐由 PetCard 传入） */
-  const BalanceBubble = makeBalanceBubble({ h });
+  /** 余额气泡（哑组件：数据与显隐由 PetCard 传入；展开态的两个 hook 由这里注入） */
+  const BalanceBubble = makeBalanceBubble({ h, useState, useEffect });
   /** 碎碎念气泡（哑组件：文本与显隐由 PetCard 传入） */
   const WhisperBubble = makeWhisperBubble({ h });
 
@@ -179,6 +216,7 @@ export function makePetUI(rt: {
     throwCueTick,
     lock,
     lockTick,
+    menuItemsRef,
     arena,
   }: {
     cfg: RuntimePet;
@@ -217,6 +255,9 @@ export function makePetUI(rt: {
      *  这里自己定时解除（见 shared/state.ts 的 readLock）。 */
     lock?: LockState;
     lockTick: number;
+    /** 第三方菜单项（/state 的 sections.menu 快照）。传 ref 而不是值：**只在右键那一刻**读，
+     *  注册表变化不需要重渲染任何宠物（菜单本来就是打开时现拼的）。 */
+    menuItemsRef: ReactNS.MutableRefObject<MenuMoreItem[]>;
     arena: ReactNS.MutableRefObject<{ slots: Record<string, PetCollisionSlot> }>;
   }) {
     // ---- 尺寸（由配置传入；容器/设置页更新后即时跟随）----
@@ -247,6 +288,9 @@ export function makePetUI(rt: {
     const [margin, setMargin] = useState({ x: cfg.position.marginX, y: cfg.position.marginY });
     // 余额气泡显隐（事件触发时显示，10s 后定时自动消失）
     const [bubbleOn, setBubbleOn] = useState(false);
+    // 余额气泡的展开态（点气泡 → 三窗口完整读数）。每次重新弹出都归位到收起态，
+    // 否则上一次展开过，下一轮自动轮询一冒头就是展开的样子。
+    const [balanceExpanded, setBalanceExpanded] = useState(false);
     const bubbleTimerRef = useRef<number | null>(null);
     // 碎碎念气泡（显隐定时器与余额气泡各自独立：10s 各自计时互不干扰；渲染走单槽优先级）
     const [whisperBubbleOn, setWhisperBubbleOn] = useState(false);
@@ -309,6 +353,10 @@ export function makePetUI(rt: {
       offY: 0,
       // 触屏长按定时器（只有触摸/笔走这条路径，见 handlePointerDown）；null = 当前没有待触发的长按
       lpTimer: null as ReturnType<typeof setTimeout> | null,
+      // 弹弓：本次拖拽按「拉距」算力度（双击的第二下按住拖）。anchorX/Y = 按下时的宠物**中心**
+      sling: false,
+      anchorX: 0,
+      anchorY: 0,
     });
     const justDraggedRef = useRef(false);
     // 拖拽抛掷物理状态：轨迹样本 / 包围盒左上角实时 px / 弹簧目标与速度 / 弹簧跟随 rAF / 抛掷 rAF
@@ -324,6 +372,9 @@ export function makePetUI(rt: {
     const throwStateRef = useRef<ThrowState | null>(null);
     // 按下瞬间已触发过积分（pointerdown 即触发；防止松开的 click 再触发一次/再播点击动画）
     const pressScoreFiredRef = useRef(false);
+    // 上一次**按下**的时刻（0 = 还没记过）：弹弓的判定依据是「两次按下之间隔了多久」。
+    // 按下记、按下比——这次按了多久、什么时候松手都不参与判定（见 handlePointerDown）。
+    const lastPressAtRef = useRef(0);
     // Q 弹挤压（点击回应 / 抛掷落地）：rAF + 待压标记（等新动画真正成为前台再压，压的是新首帧）
     const squashRef = useRef<number | null>(null);
     const squashTokenRef = useRef(0);
@@ -412,7 +463,7 @@ export function makePetUI(rt: {
           encodeURIComponent(cfg.assetRoot ?? cfg.id) +
           '/' +
           encodeURIComponent(next) +
-          THUMB_EXT;
+          thumbExt();
       el.loop = !nextOnce;
       el.muted = true;
       el.autoplay = true;
@@ -610,6 +661,7 @@ export function makePetUI(rt: {
       if (!cfg.balanceEnabled && !balanceManual) return; // 自动轮询受开关门控；手动无条件通过
       const p = balancePercent(balance);
       if (balanceManual || p !== undefined) {
+        setBalanceExpanded(false); // 新一轮查询一律从收起态开始（上次展开过也不延续）
         setBubbleOn(true);
         // 气泡 10s 定时消失（与动画解耦：即使动画被点击/拖拽打断，气泡也按时收起；重复触发先清旧定时器）
         if (bubbleTimerRef.current !== null) window.clearTimeout(bubbleTimerRef.current);
@@ -1286,7 +1338,14 @@ export function makePetUI(rt: {
         const dt = (now - last) / 1000;
         last = now;
         const fallingVy = state.vy; // 本帧积分前的竖直速度（正=下落）：即落地冲击速度
-        const res = throwStep(state, dt, bounds, cfg.physics);
+        // 细分积分：弹弓没有速度上限，一帧可能跨过上百 px——不拆会跳过「落地/反弹」那几帧，
+        // Q 弹、地面摩擦与 atRest 判定都会漏。普通甩抛每帧位移远小于 SUBSTEP_PX，
+        // 这里算出 1 步，与旧实现的单步积分逐位相同。
+        const substeps = throwSubsteps(state.vx, state.vy, dt);
+        let res = throwStep(state, dt / substeps, bounds, cfg.physics);
+        for (let i = 1; i < substeps && !res.atRest; i++) {
+          res = throwStep(res, dt / substeps, bounds, cfg.physics);
+        }
         state = { x: res.x, y: res.y, vx: res.vx, vy: res.vy };
         throwStateRef.current = state;
         // ---- 宠物间碰撞（仅 petCollision 开启）：飞行中的自己被甩出时撞到其它宠物 ----
@@ -1698,7 +1757,25 @@ export function makePetUI(rt: {
         offY = e.clientY - (rr.top + rr.height / 2);
         boxPxRef.current = { x: rr.left, y: rr.top };
       }
-      dragRef.current = { active: true, dragging: false, sx: e.clientX, sy: e.clientY, offX, offY, lpTimer: null };
+      // 弹弓：**按下时**记时刻、**按下时**比对——间隔 = 两次按下之间的距离，
+      // 因此这次拖了多久、什么时候松手都不影响判定（拖十分钟也早已超出窗口）。
+      // 没有模式、没有待拉状态，判定就落在这一句上（见 shared/physics.ts 的弹弓换算）。
+      const pressNow = performance.now();
+      const sling = pressNow - lastPressAtRef.current < SLINGSHOT_DOUBLE_MS;
+      lastPressAtRef.current = sling ? 0 : pressNow; // 命中就清掉，免得连点三下弹两次
+      const anchor = boxPxRef.current;
+      dragRef.current = {
+        active: true,
+        dragging: false,
+        sx: e.clientX,
+        sy: e.clientY,
+        offX,
+        offY,
+        lpTimer: null,
+        sling,
+        anchorX: anchor ? anchor.x + halfW : e.clientX,
+        anchorY: anchor ? anchor.y + halfH : e.clientY,
+      };
       // 触屏长按 500ms 打开右键菜单：复用同一套按下判定。手指移动超过 8px 即取消；
       // 鼠标与笔不走这条分支（它们本来就有右键，无需长按替代）。
       if (e.pointerType !== 'mouse' && e.pointerType !== 'pen') {
@@ -1792,27 +1869,54 @@ export function makePetUI(rt: {
         const bx = boxPxRef.current;
         const px = bx ? bx.x : e.clientX - d.offX - halfW;
         const py = bx ? bx.y : e.clientY - d.offY - halfH;
-        // 初速估算：够快就抛掷（重力+边缘反弹+落地摩擦），否则原地放下
-        const vel = estimateReleaseVelocity(dragTrailRef.current, performance.now(), cfg.physics);
-        dragTrailRef.current = [];
-        if (vel) {
+        if (d.sling) {
+          // 弹弓：力度 = **拉距**（与手速无关），方向 = 拉的**反方向**。
+          // 拉向量用宠物实际中心算（不是指针）——弹簧跟手有滞后，用户看到的是宠物拉出去多远。
+          // 之后与甩抛走同一条 startThrow：重力/反弹/摩擦/落地 Q 弹/宠物互撞/多屏完全复用。
+          const pullX = px + halfW - d.anchorX;
+          const pullY = py + halfH - d.anchorY;
+          const dist = Math.hypot(pullX, pullY);
+          const power = slingshotPower(dist, size);
+          const v = slingshotVelocity(pullAngle(pullX, pullY), power, cfg.physics.throwPower);
+          dragTrailRef.current = [];
           console.log(
             '[dsh-pet] ' +
               new Date().toTimeString().slice(0, 8) +
               ' pet=' +
               cfg.id +
-              ' release vx=' +
-              Math.round(vel.vx) +
+              ' sling dist=' +
+              Math.round(dist) +
+              ' power=' +
+              power.toFixed(2) +
+              ' vx=' +
+              Math.round(v.vx) +
               ' vy=' +
-              Math.round(vel.vy) +
-              ' |v|=' +
-              Math.round(Math.hypot(vel.vx, vel.vy)),
+              Math.round(v.vy),
           );
-          // 抛掷：飞行期间由 startThrow 的 rAF 直接写 left/top，落定后才提交 customPos
-          startThrow(px, py, vel.vx, vel.vy);
+          startThrow(px, py, v.vx, v.vy);
         } else {
-          // 原地放下：提交 customPos → React 按 rootStyle（含边界夹取）重排位置
-          setCustomPos({ rx: (px + halfW) / window.innerWidth, ry: (py + halfH) / window.innerHeight });
+          // 初速估算：够快就抛掷（重力+边缘反弹+落地摩擦），否则原地放下
+          const vel = estimateReleaseVelocity(dragTrailRef.current, performance.now(), cfg.physics);
+          dragTrailRef.current = [];
+          if (vel) {
+            console.log(
+              '[dsh-pet] ' +
+                new Date().toTimeString().slice(0, 8) +
+                ' pet=' +
+                cfg.id +
+                ' release vx=' +
+                Math.round(vel.vx) +
+                ' vy=' +
+                Math.round(vel.vy) +
+                ' |v|=' +
+                Math.round(Math.hypot(vel.vx, vel.vy)),
+            );
+            // 抛掷：飞行期间由 startThrow 的 rAF 直接写 left/top，落定后才提交 customPos
+            startThrow(px, py, vel.vx, vel.vy);
+          } else {
+            // 原地放下：提交 customPos → React 按 rootStyle（含边界夹取）重排位置
+            setCustomPos({ rx: (px + halfW) / window.innerWidth, ry: (py + halfH) / window.innerHeight });
+          }
         }
       }
       // 提示复位：点击/拖拽期间收起的悬浮提示，指针仍在命中区内就恢复——指针捕获期间
@@ -1860,6 +1964,17 @@ export function makePetUI(rt: {
     /** `keepFacing` = 调用方已**显式指定**朝向（POST /anim 的 facing）：跳过下面"文字类动画
      *  点播前强制朝左"那条镜像修正——显式值优先。右键菜单点播不传（保持原语义）。 */
     const handleMenuAction = (leaf: MenuLeaf, playbackId?: string, keepFacing = false) => {
+      if (leaf.action === 'third-party') {
+        // 第三方菜单项：只把 (owner, label) 交给宿主，具体做什么由注册方自己去查 /menu/events。
+        // 带上当前宠物的 id——同一条菜单项在不同宠物上被点，注册方要能分辨是哪只。
+        const owner = leaf.owner ?? '';
+        if (owner !== '') {
+          postAction('/dsh-pet-7340/menu/click', { owner, label: leaf.label, pet: cfg.id }).catch((e: unknown) =>
+            console.warn('[dsh-pet] 第三方菜单点击上报失败', e),
+          );
+        }
+        return;
+      }
       if (leaf.action === 'show-balance') {
         // 查看余额（与桌面菜单同一套语义）：POST 动作端点让 host 立即刷新一次并写入 S（manual 标记随数据一起写）。
         // 结果**这里什么都不用做**：写叶子会让版本号变，挂着的长轮询那一拍立刻返回并展示（0 延迟）。
@@ -1974,7 +2089,10 @@ export function makePetUI(rt: {
       // 工具项（查看余额 / 碎碎念 / 对话 / 回到初始位置，与桌面端同一套）+ 动作树（动作→分类→具体动画）。
       // 「查看余额」**无条件显示**（与桌面端一致）：即使该宠物关了 balanceEnabled 也能点——手动请求不受开关限制
       //（该开关只关自动轮询与档位动画），与碎碎念「手动触发不受 whisperEnabled 限制」同一条原则。
-      const tree: MenuNode[] = [
+      // 第三方菜单项（别的插件注册的）统一收在「更多」下：0 项不出现；某个 owner 只有 1 项时
+      // 跳过 owner 那层直接平铺（规则见 shared/menu 的 buildMoreBranch）。位置在整棵动作树之后。
+      const more = buildMoreBranch(menuItemsRef.current);
+      const tools: MenuNode[] = [
         { label: '查看余额', action: 'show-balance' },
         { label: '碎碎念', action: 'whisper' },
         { label: '对话', action: 'chat' },
@@ -1982,8 +2100,8 @@ export function makePetUI(rt: {
         // 显示位置（仅网页/仅桌面/两者/都不）：与桌面端注入**同一份**子菜单。
         // 改成不含 web 的值（仅桌面/都不）后，本宠物会随即从 visiblePets 里消失——字面意义上的"自己走掉"。
         displayMenuBranch(),
-        ...buildMenuTree(petAnims),
       ];
+      const tree: MenuNode[] = [...tools, ...buildMenuTree(petAnims), ...(more ? [more] : [])];
       if (!tree.length) return;
       e.preventDefault();
       e.stopPropagation(); // 不触碰 DSH 页面任何菜单/右键处理
@@ -2028,6 +2146,13 @@ export function makePetUI(rt: {
     // 优先级：终态任务 > 碎碎念/对话 > 余额 > 非终态任务。
     // 为什么终态任务不让位：完成/失败气泡只活 10s，被事件顶掉就彻底看不到了；非终态任务气泡
     // 常驻（不设自动收起），让位 10s 零损失。与桌面端 sprite.js 的 renderBubble 同一套优先级。
+    /** 点余额气泡：切换展开/收起，并把 10s 计时器重置一次
+     *  （不重置的话，第 8 秒才点开就只剩 2 秒，"看完整信息"这个目的就落空了） */
+    const toggleBalanceDetail = () => {
+      setBalanceExpanded((v) => !v);
+      if (bubbleTimerRef.current !== null) window.clearTimeout(bubbleTimerRef.current);
+      bubbleTimerRef.current = window.setTimeout(() => setBubbleOn(false), BUBBLE_DURATION_MS);
+    };
     const workTerminal = workStatus?.state === 'success' || workStatus?.state === 'error';
     const bubbleNode = (() => {
       if (workTerminal && workBubbleOn && workText && cfg.workStatusEnabled) {
@@ -2045,7 +2170,12 @@ export function makePetUI(rt: {
         });
       }
       if (bubbleOn && balance && (cfg.balanceEnabled || balanceManual)) {
-        return h(BalanceBubble, { state: balance, on: bubbleOn });
+        return h(BalanceBubble, {
+          state: balance,
+          on: bubbleOn,
+          expanded: balanceExpanded,
+          onToggle: toggleBalanceDetail,
+        });
       }
       if (workBubbleOn && workText && cfg.workStatusEnabled) {
         return h(WhisperBubble, { text: workText, on: workBubbleOn });
@@ -2254,6 +2384,9 @@ export function makePetUI(rt: {
     // 忽略自动来源），并自己按 expiresAt 定时解除——宿主不会到点推一次"锁没了"。
     const [lockTick, setLockTick] = useState(0);
     const lockRef = useRef<Record<string, LockState>>({});
+    // 第三方菜单项（/state 的 sections.menu）：只在**打开右键菜单那一刻**被读一次，
+    // 不参与任何渲染 → 存 ref 就够，不需要 tick（也不需要重渲染整个宠物）。
+    const menuItemsRef = useRef<MenuMoreItem[]>([]);
     useEffect(() => {
       if (!ready) return;
       let alive = true;
@@ -2267,6 +2400,9 @@ export function makePetUI(rt: {
       const applyState = (s: PollState) => {
         if (baseline === null) {
           baseline = flattenCounters(s); // 首拉：只记基线，不渲染
+          // 菜单项是**当前状态**不是"事件"，首拉必须装上：否则刷新页面后第三方菜单会一直是空的，
+          // 要等下一次注册（写 sections.menu）才出现。
+          menuItemsRef.current = readMenuItems(s.sections.menu?.data);
           return;
         }
         for (const { path, leaf } of takeChanged(s, baseline)) {
@@ -2289,6 +2425,9 @@ export function makePetUI(rt: {
           } else if (path === 'sections.notify') {
             // 系统通知（单槽：同一秒多条只留最后一条，由 host 决定）→ 弹 toast（内部有开关/聚焦/权限门）
             notifyFromFrame(leaf.data);
+          } else if (path === 'sections.menu') {
+            // 第三方菜单注册表快照：只更新 ref（菜单在右键那一刻现拼），不触发任何渲染
+            menuItemsRef.current = readMenuItems(leaf.data);
           } else if (path.startsWith('pets.') && path.endsWith('.say')) {
             // 说话叶子：路径形如 pets.<id>.say。宠物 id **允许含点号**，所以按前缀/后缀切片，
             // 绝不 split('.')（那会把 id 切碎、派发给不存在的宠物）。
@@ -2394,6 +2533,7 @@ export function makePetUI(rt: {
             throwCueTick,
             lock: lockRef.current[p.id],
             lockTick,
+            menuItemsRef,
             arena: arenaRef,
           }),
         )

@@ -36,6 +36,8 @@
  *                                       { sections: { balance, workStatus, notify }, pets: { <id>: { say } } }，
  *                                       每个叶子 = { counter, data }；counter 变了前端才渲染。
  *                                       只读、纯内存、零副作用（绝不在这里触发外部调用/模型生成）。
+ *   /dsh-pet-7340/work-status          → 外部写入工作状态（POST = 设置固定外部槽的档位/文案；
+ *                                       DELETE = 清空回空闲。不做多写者仲裁/租约/会话管理）
  *   /dsh-pet-7340/balance              → 余额刷新（POST 动作端点，写 S；数据从 /state 读）
  *   /dsh-pet-7340/whisper              → 让某只宠物立即说一句（POST 动作端点，写 S 的 pets.<id>.say；
  *                                       响应带生成的 text，配图时带 image）
@@ -114,6 +116,7 @@ import {
 } from './broadcast';
 import { decideAnim } from './anim';
 import { LockStore } from './lock';
+import { MENU_WAIT_MAX_MS, MenuRegistry } from './menu';
 import { decidePosition, decideThrow, positionLeafData } from './motion-cue';
 import { parsePlaybackPath, parseWaitQuery, PlaybackStore } from './playback';
 import { PoseStore, normalizePoseInput } from './pose';
@@ -135,10 +138,13 @@ import {
 } from './config';
 import {
   GOAL_UPDATE_TOOL,
+  HOST_WORK_STATUS_STATES,
+  TASK_TEXT_MAX,
   reduceWorkStatus,
   currentTaskFromTodo,
   goalUpdateAction,
   WorkStatusStore,
+  type HostWorkStatusState,
   type WorkStatusTurnContext,
 } from './work-status';
 import {
@@ -153,7 +159,7 @@ import {
 } from './notify-events';
 import { profileNameFrom, storageEntries } from './storage-paths';
 import { parseStateWaitQuery, PollStateStore } from './state';
-import { timeContextOf } from './time-context';
+import { composeSystemPrompt, petPersona } from './persona';
 import {
   HelperProcess,
   defaultElectronExe,
@@ -345,6 +351,10 @@ export function apply(ctx: any): void {
   // 轮询统一状态（S）：前端 1s 轮询的**唯一**数据源（余额 / 工作状态 / 通知 / 宠物说话）。
   // 所有写入走 state.writeSection / writePet（由它统一更新 counter），见 ./state 的说明。
   const state = new PollStateStore();
+  // 第三方右键菜单注册表（issue：第三方菜单项）：**进程内存态**，不落盘，重启即空。
+  // 与 S 的关系：注册表本身写进 S 的 sections.menu（两端据此拼「更多」）；点击事件**不进 S**——
+  // 它是触发不是状态，走 /menu/events 的读取即消费，只给注册它的那个 owner 看。见 ./menu 的说明。
+  const menuRegistry = new MenuRegistry();
   // 播放记录表（issue #122 第 3 项「播放与完成回执」）：**由渲染端上报驱动**的状态机 + 等待者。
   // 与 S 无关：播放记录是 per-caller 资源（只有发起那次点播的调用方关心、有生命周期、数量随
   // 第三方调用方增长），塞进 1s 全局广播会让每个窗口为每个功能付流量。见 ./playback 的说明。
@@ -356,18 +366,61 @@ export function apply(ctx: any): void {
   // 会话存**——task 曾是全局单值，写过一次就跟着此后所有会话活动一直显示（issue #59）。
   // 进程内内存态：重启回空闲；每次会话事件有实际状态变化才更新（签名比对防刷屏）。
   const workStatus = new WorkStatusStore();
+  /** 外部写入槽：固定会话 id，最后写入者生效；不做多写者仲裁/租约/会话管理 */
+  const EXTERNAL_WORK_SESSION = 'api';
+  let externalWorkSeq = 0;
   // 工作状态快照 → 写进 S（前端 1s 轮询 /state 后按 counter 变化渲染）。
   // **只在内容真的变了时才写**：每次写都会推进 counter，前端据此重播档位动画——
   // 会话事件很密（每个 tool/call 都来），无条件写会把动画刷成幻灯片。
   // 判据用**内容**（state + task）而不是 store 的 ts：ts 是 Date.now()（毫秒分辨率），
   // 同一毫秒内连改两次会被误判成"没变化"而漏写（测试里连发事件就会踩到）。
   // data 里不再带 ts：「变了没有」已由叶子 counter 承担，少一个会漂移的第二信号。
+  //
+  // **忙碌档抖动抑制（滞回）**：工具秒回时 `tool/call` 报 working、`tool/result` 报 result，
+  // 一次回复里能来回切十几次；每切一次前端就把 10s 的片段从第 0 帧重播，观感即"一秒一刀"
+  // （实测 6 次快工具调用 → 13 次换片，working 每次只活 1~2 秒）。
+  // 这里只压 **working ↔ result 这对忙碌档之间的互切**：距上次写入不足 WORK_STATE_GAP_MS
+  // 就先不写，**但不丢**——挂一个 trailing 定时器，到点重新取快照补写，所以最终状态一定落地，
+  // 只是最多晚 GAP。
+  //
+  // 刻意**不压**的对象（"写完立刻可见"是既有契约，动它会把一串宿主回归测试打翻）：
+  //   - 回空闲 / 终态（success、error）：反馈不能迟到；
+  //   - 任何进/出忙碌档以外的变化（thinking、waiting、…）；
+  //   - 任务文案变化（todo/write 的 task）：气泡文字优先于动画平滑，而且它可能伴随
+  //     "展示会话切到另一只"（同档但 task 不同），那不是抖动。
+  // 为什么压在这里而不是两个前端：网页 overlay 与桌面 helper 消费的是同一个叶子，
+  // 一处压住两端同时生效，也不必在前端各维护一份状态机。
+  const WORK_STATE_GAP_MS = 5000;
+  /** 忙碌档：只有这两个档位之间的互切算"抖动"，其余档位变化一律立即写 */
+  const isBusyTier = (s: string | null): boolean => s === 'working' || s === 'result';
   let publishedWork = '\u0000';
+  let publishedState: string | null = null;
+  let publishedTask: string | null = null;
+  let publishedWorkAt = 0;
+  let workFlushTimer: ReturnType<typeof setTimeout> | null = null;
   const publishWorkStatus = (): void => {
     const snap = workStatus.snapshot();
     const key = String(snap.state) + '\u0000' + String(snap.task);
     if (key === publishedWork) return;
+    // 抖动判定：文案没变、且前后都是忙碌档（同档已被上面的 key 短路掉，这里必是互切）
+    const churn = snap.task === publishedTask && isBusyTier(publishedState) && isBusyTier(snap.state);
+    const wait = WORK_STATE_GAP_MS - (Date.now() - publishedWorkAt);
+    if (churn && wait > 0) {
+      // 压住这一拍：到点再取**最新**快照补写（不要在这里缓存 snap——期间可能又变了）
+      workFlushTimer ??= setTimeout(() => {
+        workFlushTimer = null;
+        publishWorkStatus();
+      }, wait);
+      return;
+    }
+    if (workFlushTimer !== null) {
+      clearTimeout(workFlushTimer);
+      workFlushTimer = null;
+    }
     publishedWork = key;
+    publishedState = snap.state;
+    publishedTask = snap.task;
+    publishedWorkAt = Date.now();
     state.writeSection('workStatus', { state: snap.state, task: snap.task });
   };
   // 占用锁（issue #122 第 4 项「独立动作/气泡占用」）：**内存态**一把锁 + TTL，第三方联动期间
@@ -649,22 +702,21 @@ export function apply(ctx: any): void {
 
   // ---- 配置消费：唯一入口 readAllConfig（./config）——返回值绝对正确，这里只读字段，零校验 ----
 
-  /** 某宠物的最终人设 system：所属条目（写在该条目 `pets` 里的实例 → 那个条目；主配置的实例 → `main`）
-   *  的 whisperPrompt（合并器已填默认）+ 无条件追加一句名字声明（name，缺失已按 id）——碎碎念与对话共用同一拼装。
-   *  + 末尾追加一行**时间背景**（time-context.ts：日期/星期/时刻/时段/工作日或周末）：
-   *    碎碎念与对话各自每次生成都会重新走这里，所以拿到的永远是**当前**时刻，不需要额外的刷新机制；
-   *    非法 Date 时它为空串，此时整行不加（宁可没有时间信息，也不把 NaN 拼进提示词）。
+  /** 某宠物的最终人设 system：**实例级** `pets[].whisperPrompt` 优先，没写回落到所属条目
+   *  （写在该条目 `pets` 里的实例 → 那个条目；主配置的实例 → `main`）的 whisperPrompt（合并器已填默认）。
+   *  拼装本身在 ./persona（纯函数、有单测）：人设正文 + 一句名字声明（name，缺失已按 id）+ 一行时间背景
+   *  （日期/星期/时刻/时段/工作日或周末/节日）——碎碎念与对话共用同一份拼装。
+   *  时间每次现算（这里传 new Date()），所以拿到的永远是**当前**时刻，不需要额外的刷新机制。
    *
    *  收 `findPetInstance` 的**命中结果**而不是 `(petId, cfg)`：两个调用方都已经解析过了，这里再查一次
    *  只会多出一处"查不到就兜底 main"的不可达分支。 */
-  const petSystemPrompt = (found: { conf: Record<string, unknown>; pet: Record<string, unknown> }): string => {
-    const prompt = typeof found.conf.whisperPrompt === 'string' ? found.conf.whisperPrompt : '';
-    const name = String(found.pet.name || found.pet.id);
-    const nameLine = '你的名字是“' + name + '”。';
-    const base = prompt ? prompt + '\n' + nameLine : nameLine;
-    const time = timeContextOf(new Date());
-    return time ? base + '\n' + time : base;
-  };
+  const petSystemPrompt = (found: { conf: Record<string, unknown>; pet: Record<string, unknown> }): string =>
+    composeSystemPrompt({
+      prompt: petPersona(found.conf, found.pet),
+      name: String(found.pet.name ?? ''),
+      id: String(found.pet.id ?? ''),
+      now: new Date(),
+    });
 
   /** 对话记忆轮数（1 轮 = 1 问 1 答）：该宠物**所属条目**的 chatMemoryRounds（合并器已填默认非负数字）。
    *  同样收**已解析的条目配置**：两个调用方都已经拿到 `findPetInstance` 的结果。 */
@@ -674,7 +726,7 @@ export function apply(ctx: any): void {
   };
 
   /** 生成/返回某宠物的一句碎碎念（周期 GET 与菜单手动触发共用的同一逻辑）：
-   *  每只宠物独立生成（所属条目的人设）。生成成功就写进 S 的 pets.<id>.say——
+   *  每只宠物独立生成（人设 = 它自己的 whisperPrompt，没写回落到所属条目）。生成成功就写进 S 的 pets.<id>.say——
    *  碎碎念 / 命令气泡 / 对话回复在前端本来就是**同一条展示链路**（同一个 triggerWhisper、
    *  同一个气泡槽、同一批 events.whisper 动画），所以合并成同一个叶子；"周期内不重复"由
    *  调度侧的 lastWhisperAt 保证，不再需要一份 whisperCache（多端共享也由 S 天然保证）。
@@ -741,7 +793,7 @@ export function apply(ctx: any): void {
       // 分桶，外加一只幽灵叶子（/state 里常驻到进程重启）。
       if (!found) return { ok: false, reason: 'unknown-pet', message: '没有这只桌宠：' + petId };
       const rounds = memoryRounds(found.conf);
-      // 人设：所属条目的 whisperPrompt（合并器已填默认）+ 名字声明（与碎碎念同一拼装）
+      // 人设：实例级 whisperPrompt 优先，没写回落所属条目（与碎碎念同一拼装）
       const system = petSystemPrompt(found);
       // 配图：开关关闭 → 空池（指令与解析都不介入，与旧行为逐字一致）；目录链按所属条目取。
       // 张数上限（chatImageLimit，0 = 不限制）：整张清单每条消息都要附，截断后费用上限可控。
@@ -1296,6 +1348,70 @@ export function apply(ctx: any): void {
       };
     }
 
+    // 第三方右键菜单（供别的插件注册自己的菜单项）。四个方法：
+    //   POST   /menu/item    注册（该 owner 的菜单项**整体覆盖**）
+    //   DELETE /menu/item    清除该 owner 的全部菜单项（幂等）
+    //   GET    /menu/events  查询触发（读取即消费；?wait= 长轮询）
+    //   POST   /menu/click   渲染端点击上报（内部通道，第三方不调）
+    // 业务失败一律 200 + { ok:false, reason, message }（与 /anim、/lock 等同口径）；
+    // 400 只留给「JSON 坏了」，405 只留给方法错。
+    // 注册表在进程内存（./menu），快照写进 S 的 sections.menu：两端右键菜单据此拼「更多」，
+    // 因此注册后**不用重启桌面 Helper**，下一拍 /state 就到了（长轮询下几乎是立即）。
+    if (rest === 'menu/item') {
+      if (method === 'DELETE') {
+        const result = menuRegistry.clear(url.searchParams.get('owner') ?? '');
+        if (!result.ok) {
+          return { kind: 'json', status: 200, obj: { ok: false, reason: result.reason, message: result.message } };
+        }
+        state.writeSection('menu', { items: menuRegistry.snapshot() });
+        return { kind: 'json', status: 200, obj: { ok: true, removed: result.removed } };
+      }
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body ?? '');
+      } catch {
+        return { kind: 'json', status: 400, obj: { error: 'invalid JSON body' } };
+      }
+      const result = menuRegistry.register(parsed);
+      if (!result.ok) {
+        return { kind: 'json', status: 200, obj: { ok: false, reason: result.reason, message: result.message } };
+      }
+      // 写入会唤醒所有挂起的长轮询；两端拿到新 counter 就重拼菜单（下一次右键即生效）
+      state.writeSection('menu', { items: menuRegistry.snapshot() });
+      return { kind: 'json', status: 200, obj: { ok: true } };
+    }
+
+    if (rest === 'menu/events') {
+      if (method !== 'GET') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      const owner = url.searchParams.get('owner') ?? '';
+      const rawWait = Number(url.searchParams.get('wait') ?? '0');
+      const waitMs = Number.isFinite(rawWait) && rawWait > 0 ? Math.min(rawWait, MENU_WAIT_MAX_MS) : 0;
+      // 挂起等待期间调用方断开：不额外处理（最多白挂 MENU_WAIT_MAX_MS，无状态残留）
+      const events = await menuRegistry.poll(owner, waitMs);
+      // owner 不存在（没注册过 / 被清除了 / 宿主重启过）：业务失败，仍是 200
+      if (events === null) {
+        return {
+          kind: 'json',
+          status: 200,
+          obj: { ok: false, reason: 'unknown-owner', message: '这个 owner 没有注册，重新注册即可' },
+        };
+      }
+      return { kind: 'json', status: 200, obj: { ok: true, events } };
+    }
+
+    if (rest === 'menu/click') {
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body ?? '');
+      } catch {
+        return { kind: 'json', status: 400, obj: { error: 'invalid JSON body' } };
+      }
+      // delivered=false（项已不在）= 正常竞态：渲染端拿的是上一拍快照，仍回 200
+      return { kind: 'json', status: 200, obj: menuRegistry.click(parsed) };
+    }
+
     // 可选模型清单（设置页「AI 模型」两个下拉框的数据源）：与 DSH 自己的模型选择器**同源**——
     // 都来自宿主 llm 服务：listProviders = 已注册的实时服务商路由，listModels(provider) = 该路由下的模型。
     // 只读、无副作用；某个服务商列模型失败（适配器不支持 / 网络）只让它空着，不拖垮整张清单。
@@ -1388,6 +1504,66 @@ export function apply(ctx: any): void {
         }
         signal?.addEventListener('abort', onAbort, { once: true });
       });
+    }
+
+    // 外部写入工作状态：/dsh-pet-7340/work-status
+    //   POST   = 设置固定外部槽 `api` 的档位（可选任务文案）；任务文案省略 = 保留原值，null = 清空
+    //   DELETE = 清空外部槽回空闲（幂等）
+    // 只解决"外部程序把状态告诉桌宠"，不做多写者仲裁/租约/会话管理；
+    // 外部槽与 DSH 会话一起参与现有优先级（waiting > error > working > thinking > result > success）。
+    if (rest === 'work-status') {
+      if (method === 'DELETE') {
+        if (workStatus.clear(EXTERNAL_WORK_SESSION)) publishWorkStatus();
+        return { kind: 'text', status: 204, body: '' };
+      }
+      if (method !== 'POST') return { kind: 'json', status: 405, obj: { error: 'method not allowed' } };
+      if (Buffer.byteLength(body ?? '', 'utf8') > 8 * 1024)
+        return { kind: 'json', status: 413, obj: { error: 'body too large' } };
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body ?? '');
+      } catch {
+        return { kind: 'json', status: 400, obj: { error: 'invalid JSON body' } };
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        return { kind: 'json', status: 400, obj: { error: 'invalid JSON body' } };
+      const payload = parsed as { state?: unknown; task?: unknown };
+      const state = payload.state;
+      if (typeof state !== 'string' || !(HOST_WORK_STATUS_STATES as readonly string[]).includes(state))
+        return { kind: 'json', status: 400, obj: { error: 'invalid state' } };
+      let task: string | null | undefined;
+      if (Object.prototype.hasOwnProperty.call(payload, 'task')) {
+        if (payload.task === null) {
+          task = null;
+        } else if (typeof payload.task === 'string') {
+          const trimmed = payload.task.trim();
+          if (trimmed === '') {
+            task = null;
+          } else if (Array.from(trimmed).length > TASK_TEXT_MAX) {
+            return {
+              kind: 'json',
+              status: 400,
+              obj: { error: `task too long (max ${TASK_TEXT_MAX} code points)` },
+            };
+          } else {
+            task = trimmed;
+          }
+        } else {
+          return { kind: 'json', status: 400, obj: { error: 'invalid task' } };
+        }
+      }
+      externalWorkSeq += 1;
+      workStatus.setState(EXTERNAL_WORK_SESSION, state as HostWorkStatusState, externalWorkSeq);
+      if (task !== undefined) workStatus.setTask(EXTERNAL_WORK_SESSION, task);
+      publishWorkStatus();
+      return {
+        kind: 'json',
+        status: 200,
+        obj: {
+          state: workStatus.stateOf(EXTERNAL_WORK_SESSION) ?? state,
+          task: workStatus.taskOf(EXTERNAL_WORK_SESSION),
+        },
+      };
     }
 
     // 余额：/dsh-pet-7340/balance（POST = 立即刷新一次并写入 S，返回 {ok}）
@@ -2029,18 +2205,34 @@ export function apply(ctx: any): void {
     }
     // 素材归属（按是否存在该宠物的独立素材目录判定，绝不静默混用）：
     //   - 存在 `pet/<petId>-animation/`（pet pack 宠物，URL 段 = 素材根 assetRoot）：
-    //     只查自己的目录，查不到即 404 显式报错——绝不回落别的素材
+    //     只查自己的目录，查不到即 404 显式报错——绝不回落**别的素材**
+    //     （唯一例外：同名的 webm/mov 互换，即下方 mov 缺失时退回 webm）
     //   - 不存在（**所有主配置宠物**：main 及用户添加的任意多只，共用全局动画池）：
     //     主素材链——用户 main-animation/<ext 子目录> 优先，其次包内 assets/<ext 子目录>
     // extraAnimDir 必须先过 resolveAsset：petId 是解码后的 URL 段，Windows 上 %5C 解出的
     // 反斜杠不会被 rest.split('/') 切开，直接 join 会让 `..\..\x` 逃出用户根读盘。
     const extraAnimDir = resolveAsset(petConfigDir, petId + '-animation');
-    const file =
-      extraAnimDir !== undefined && existsSync(extraAnimDir)
-        ? resolveExisting(extraAnimDir, fileName)
-        : (resolveExisting(userRootFor(ext), fileName) ?? resolveExisting(assetRootFor(ext), fileName));
+    /** 按扩展名查同名素材（专属目录优先；否则用户根 → 包内根） */
+    const findAnim = (e: string): string | undefined => {
+      const name = fileName.replace(/\.(webm|mov)$/i, '') + e;
+      return extraAnimDir !== undefined && existsSync(extraAnimDir)
+        ? resolveExisting(extraAnimDir, name)
+        : (resolveExisting(userRootFor(e), name) ?? resolveExisting(assetRootFor(e), name));
+    };
+    let file = findAnim(ext);
+    let servedExt = ext;
+    // mov（HEVC-with-Alpha，macOS 定制）不随包发布：缺失时退回同名 webm。
+    // 宿主是唯一知道素材在不在的一方——宁可让 Safari 播黑底（webm 的 alpha 被丢弃），
+    // 也不能让整段动画 404（表现就是宠物完全不显示）。
+    if (file === undefined && ext === '.mov') {
+      const fb = findAnim('.webm');
+      if (fb !== undefined) {
+        file = fb;
+        servedExt = '.webm';
+      }
+    }
     if (file === undefined) return { kind: 'text', status: 404, body: 'dsh-pet: asset not found' };
-    return { kind: 'file', file, contentType: MIME[ext] ?? 'application/octet-stream' };
+    return { kind: 'file', file, contentType: MIME[servedExt] ?? 'application/octet-stream' };
   };
 
   ctx.effect(
@@ -2411,6 +2603,11 @@ export function apply(ctx: any): void {
   // （回执的与 /state 长轮询的都不结束的话，插件重载会留下一批悬挂的响应，各自要等到超时才收尾）
   ctx.effect(() => () => {
     disposed = true;
+    // 工作状态的补写定时器：卸载后它到点已经没有意义（叶子连同长轮询一起收尾），清掉免得挂着
+    if (workFlushTimer !== null) {
+      clearTimeout(workFlushTimer);
+      workFlushTimer = null;
+    }
     // 占用锁：卸载时把锁全撤掉并写一次叶子——不写的话渲染端要等 TTL 到点才解除静止
     // （写叶子必须在 state.cancelAll() **之前**：那之后挂起的等待者已经收尾了）。
     lock.releaseAll();

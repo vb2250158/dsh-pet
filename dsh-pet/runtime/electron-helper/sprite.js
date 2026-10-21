@@ -53,6 +53,9 @@ class PetSprite {
     // main 等常规宠物（无 anims 段）用全局 cfg.animations（与浏览器 pet.ts 同一语义）。
     this.animations = pet.animations || cfg.animations;
     this.weights = pet.animationWeights || cfg.animationWeights;
+    // 第三方菜单项（/state 的 sections.menu 快照，由 events.js 的 applyMenuLeaf 灌进来）：
+    // 只在右键那一刻拼进菜单，不参与渲染。空数组 = 没有第三方项，菜单里不出现「更多」。
+    this.menuItems = [];
     // 拖拽抛掷物理参数（顶层全局；拍平已吹入实例，兜底回全局/默认）
     this.physics = pet.physics || config.physics || S.DEFAULT_PHYSICS;
     // 字体（全局一份；拍平已吹入实例，兜底回主条目/默认）：字号按本宠物尺寸算（resolveFontPx），
@@ -81,6 +84,9 @@ class PetSprite {
     // 交互/移动
     this.dragState = { active: false, dragging: false, sx: 0, sy: 0, petX: 0, petY: 0 };
     this.justDragged = false;
+    // 上一次**按下**的时刻（0 = 还没记过）：弹弓的判定依据是「两次按下之间隔了多久」。
+    // 按下记、按下比——这次按了多久、什么时候松手都不参与判定（见 onPointerDown）。
+    this.lastPressAt = 0;
     this._interactive = null; // 已上报的可交互状态（setInteractive 去重用）
     this._inputBusy = null; // 已上报的"正在用输入"状态（syncInputBusy 去重用）
     // 拖拽抛掷物理（与浏览器 pet.ts 同构；纯计算在 shared-core S.*）：
@@ -117,6 +123,9 @@ class PetSprite {
     this.tipCursor = null;
     this.balanceView = null;
     this.balanceWrap = false; // true = 当前余额气泡是不可用的「文字说明」（多行，需换行变体）
+    this.balanceState = null; // 最近一次余额读数（展开态要用它算三窗口行；balanceView 只是收起态的行）
+    this.balanceExpanded = false; // 展开态：点一下气泡看三窗口完整读数（每次重新弹出都归位）
+    this.balanceFadeTimer = null; // 展开/收起的淡出等待（250ms 后才换内容，避免硬切）
     this.prevTick = 0;
     // 说话（碎碎念 / 命令气泡 / 对话回复三合一）：文本/配图由容器统一轮询 /state 后经
     // showWhisper 送进来，本精灵不再自己轮询（改造前的 whisperLoopTimer / broadcastLoopTimer 已删）
@@ -182,6 +191,14 @@ class PetSprite {
     this.hit.setAttribute('aria-label', this.pet.name);
     this.bubble = document.createElement('div');
     this.bubble.className = 'pet-bubble';
+    // 余额气泡可点时：点一下切换展开/收起。内容与显隐都归 renderBubble，这里只做两件事——
+    // 就地吞掉事件（别让这次点击落到下面的本体命中层），以及交给 events.js 的 toggleBalanceDetail。
+    this.bubble.addEventListener('click', (e) => {
+      if (!this.balanceClickable()) return;
+      e.stopPropagation();
+      e.preventDefault();
+      this.toggleBalanceDetail();
+    });
     // 悬浮提示：与气泡同处 this.el 内的绝对定位浮层，位置/翻转由 renderTip 决定，
     // 样式走 shared 的 TOOLTIP_CSS（renderer.js 注入，与浏览器端同一份）
     this.tip = document.createElement('div');
@@ -921,7 +938,14 @@ class PetSprite {
       const fallingVy = state.vy; // 本帧积分前的竖直速度（正=下落）：即落地冲击速度
       // 每帧重取：显示器变化时 relayout() 会让缓存失效，res.screen 必须与这一份对应
       const sp = this.throwSpaceOf();
-      const res = S.throwStepRegion(state, dt, sp, this.physics, lockScreen);
+      // 细分积分：弹弓没有速度上限，一帧可能跨过上百 px——不拆会跳过「落地/反弹」那几帧，
+      // Q 弹、地面摩擦与 atRest 判定都会漏。普通甩抛每帧位移远小于 SUBSTEP_PX，
+      // 这里算出 1 步，与旧实现的单步积分逐位相同。
+      const substeps = S.throwSubsteps(state.vx, state.vy, dt);
+      let res = S.throwStepRegion(state, dt / substeps, sp, this.physics, lockScreen);
+      for (let i = 1; i < substeps && !res.atRest; i++) {
+        res = S.throwStepRegion(res, dt / substeps, sp, this.physics, lockScreen);
+      }
       state = { x: res.x, y: res.y, vx: res.vx, vy: res.vy };
       this.throwState = state;
       // 上报飞行状态（节流 ~30ms）：主进程 broker 汇聚后广播，其它窗口用它做跨窗碰撞检测；
@@ -1192,6 +1216,12 @@ class PetSprite {
     this.stopDragFollow();
     this.stopMove();
     this.dragTrail = [];
+    // 弹弓：**按下时**记时刻、**按下时**比对——间隔 = 两次按下之间的距离，
+    // 因此这次拖了多久、什么时候松手都不影响判定（拖十分钟也早已超出窗口）。
+    // 没有「待拉」状态、没有超时清理（见 shared-core 的弹弓换算）。
+    const pressNow = performance.now();
+    const sling = pressNow - this.lastPressAt < S.SLINGSHOT_DOUBLE_MS;
+    this.lastPressAt = sling ? 0 : pressNow; // 命中就清掉，免得连点三下弹两次
     this.hit.classList.add('dragging');
     // 收起悬浮提示：拖拽期间窗口逐帧跟随光标，指针始终在身体内、onMouseMove 的 inBody 恒为真，
     // 不主动收就会让提示跟着宠物一路飘（松开后由 onPointerUp 按指针位置复位）
@@ -1217,6 +1247,11 @@ class PetSprite {
     // 拖拽中宠物滞后于光标，光标可能跑到窗口外→窗口翻回穿透→本窗口收不到 pointermove/pointerup
     // （宠物"飞"出去，见 pointer-target.js）。这里上报"我正在用输入"，主进程据此绝不翻回穿透。
     this.syncInputBusy();
+    // 弹弓：把「本次是否拉弓」与按下时的宠物中心（anchorX/Y）补进同一次拖拽状态。
+    // 放在上报之后是为了不稀释上面那条源码守卫（它要求 busy 必须在建立状态后紧跟着上报）。
+    this.dragState.sling = sling;
+    this.dragState.anchorX = this.pos.x + this.halfW;
+    this.dragState.anchorY = this.pos.y + this.halfH;
     // 注意：舞台「拍平」（去掉 translateY(bottomPad)）不能在这里做——
     // 纯点击（按下即松开）会让人物瞬移上移再落下。与浏览器一致：只有拖拽超过阈值才拍平。
   }
@@ -1297,30 +1332,57 @@ class PetSprite {
       // 跟手滞后时落点跟随宠物实际位置，与浏览器 boxPx 同语义）
       const px = this.pos.x;
       const py = this.pos.y;
-      // 初速估算：够快就抛掷（重力+边缘反弹+落地摩擦），否则原地放下
-      const vel = S.estimateReleaseVelocity(this.dragTrail, performance.now(), this.physics);
-      this.dragTrail = [];
-      if (vel) {
+      if (d.sling) {
+        // 弹弓：力度 = **拉距**（与手速无关），方向 = 拉的**反方向**。
+        // 拉向量用宠物实际中心算（弹簧跟随有滞后，用户看到的是宠物被拉出去多远）。
+        // 之后与甩抛走同一条 startThrow：重力/反弹/摩擦/落地 Q 弹/跨窗互撞/多屏完全复用。
+        const pullX = px + this.halfW - d.anchorX;
+        const pullY = py + this.halfH - d.anchorY;
+        const dist = Math.hypot(pullX, pullY);
+        const rawPower = S.slingshotPower(dist, this.size);
+        const v = S.slingshotVelocity(S.pullAngle(pullX, pullY), rawPower, this.physics.throwPower);
+        this.dragTrail = [];
         console.log(
           '[dsh-pet] ' +
             new Date().toTimeString().slice(0, 8) +
             ' pet=' +
             this.pet.id +
-            ' release vx=' +
-            Math.round(vel.vx) +
+            ' sling dist=' +
+            Math.round(dist) +
+            ' power=' +
+            rawPower.toFixed(2) +
+            ' vx=' +
+            Math.round(v.vx) +
             ' vy=' +
-            Math.round(vel.vy) +
-            ' |v|=' +
-            Math.round(Math.hypot(vel.vx, vel.vy)),
+            Math.round(v.vy),
         );
-        this.startThrow(px, py, vel.vx, vel.vy);
+        this.startThrow(px, py, v.vx, v.vy);
       } else {
-        // customPos 语义 = 宠物**中心**比例（position() 用 rx*W - halfW 还原左上角；
-        // startThrow 落定也按同一公式存），松手无边界夹取
-        this.customPos = { rx: (px + this.halfW) / VIEW.w, ry: (py + this.halfH) / VIEW.h };
-        this.position();
-        // 释放后的最终窗口位置（position() 换算后，松手无夹取），冒烟断言"释放不位移"用
-        window.__dshPetDebug.lastDragRelease = { x: this.pos.x, y: this.pos.y };
+        // 初速估算：够快就抛掷（重力+边缘反弹+落地摩擦），否则原地放下
+        const vel = S.estimateReleaseVelocity(this.dragTrail, performance.now(), this.physics);
+        this.dragTrail = [];
+        if (vel) {
+          console.log(
+            '[dsh-pet] ' +
+              new Date().toTimeString().slice(0, 8) +
+              ' pet=' +
+              this.pet.id +
+              ' release vx=' +
+              Math.round(vel.vx) +
+              ' vy=' +
+              Math.round(vel.vy) +
+              ' |v|=' +
+              Math.round(Math.hypot(vel.vx, vel.vy)),
+          );
+          this.startThrow(px, py, vel.vx, vel.vy);
+        } else {
+          // customPos 语义 = 宠物**中心**比例（position() 用 rx*W - halfW 还原左上角；
+          // startThrow 落定也按同一公式存），松手无边界夹取
+          this.customPos = { rx: (px + this.halfW) / VIEW.w, ry: (py + this.halfH) / VIEW.h };
+          this.position();
+          // 释放后的最终窗口位置（position() 换算后，松手无夹取），冒烟断言"释放不位移"用
+          window.__dshPetDebug.lastDragRelease = { x: this.pos.x, y: this.pos.y };
+        }
       }
     }
   }
@@ -1329,15 +1391,27 @@ class PetSprite {
   /**
    * 本窗口是否**必须保持可交互**（= "我正在用这个窗口的鼠标输入"）。
    *
-   * 三个来源：拖拽中 / 右键菜单开着 / 对话弹窗开着——它们都是"窗口内的 DOM 或事件链正在被使用"，
-   * 而它们的输入全部来自**窗口级鼠标事件**（pointermove/pointerup/click）：窗口一旦变回穿透，
-   * 输入链就断了（拖拽会定格在最后一次采样上，松手也没人报 pointerup → 宠物按旧速度飞出去）。
+   * 三个来源：拖拽中 / 右键菜单开着 / 对话弹窗开着（外加可点的余额气泡，见下）——它们都是
+   * "窗口内的 DOM 或事件链正在被使用"，而它们的输入全部来自**窗口级鼠标事件**
+   * （pointermove/pointerup/click）：窗口一旦变回穿透，输入链就断了（拖拽会定格在最后一次采样上，
+   * 松手也没人报 pointerup → 宠物按旧速度飞出去）。
    *
    * 这个信号是**渲染端专有的知识**：只有它知道"我正在用输入"，主进程无从推断（光看光标位置和窗口
    * 位移分不清"拖拽跟手"和"漫游/抛掷"）。同时上报控件矩形：菜单/聊天框外的透明区域继续穿透。
    */
   inputBusy() {
-    return this.dragState.active || this.menuOpen || this.chatOpen;
+    // 可点的余额气泡是第四个来源：它同样长在窗口里、同样靠窗口级 click 触发，而它悬在宠物头顶的
+    // 余量区——那一块平时是穿透的，正需要借 busy + 控件矩形把它"圈"出来（见 syncInputRegions）。
+    return this.dragState.active || this.menuOpen || this.chatOpen || this.balanceClickable();
+  }
+
+  /**
+   * 余额气泡此刻是否可点可展开：只有 windows 形态（三窗口读数）才有可展开的内容；
+   * money（账户余额）与不可用状态的文字说明点开也没有别的东西，保持不可点、继续穿透。
+   */
+  balanceClickable() {
+    const s = this.balanceState;
+    return !!(this.bubbleOn && s && s.ok && s.shape === 'windows' && !this.balanceWrap);
   }
 
   /**
@@ -1357,7 +1431,9 @@ class PetSprite {
   syncInputRegions() {
     if (!window.petBridge || !window.petBridge.setInputRegions) return;
     const rects = [];
-    const controls = [...document.querySelectorAll('.dsh-pet-menu-column, .dsh-pet-chat')];
+    // 控件矩形 = 主进程允许接收点击的区域（矩形外的余量区继续穿透）。
+    // .pet-bubble.is-clickable 是余额气泡的展开态：它悬在宠物头顶的余量区，不登记就点不到。
+    const controls = [...document.querySelectorAll('.dsh-pet-menu-column, .dsh-pet-chat, .pet-bubble.is-clickable')];
     for (const el of this.inputRegionElements) {
       if (!controls.includes(el)) {
         this.inputRegionResize.unobserve(el);
@@ -1551,7 +1627,11 @@ class PetSprite {
       // 放在最后：它是"重新加载"这类维护动作，与上面几个宠物互动项语义不同。
       { label: '重载配置', action: 'reload' },
     );
-    const tree = tools.concat(S.buildMenuTree(this.animations));
+    // 第三方菜单项统一收在「更多」下（与浏览器端同一份拼装函数）：0 项不出现；
+    // 某个 owner 只有 1 项时跳过 owner 那层直接平铺（规则见 shared/menu 的 buildMoreBranch）。
+    // 放在整棵动作树之后——「更多」是"别的东西"，不插在工具项和动作之间。
+    const more = S.buildMoreBranch(this.menuItems);
+    const tree = tools.concat(S.buildMenuTree(this.animations), more ? [more] : []);
     if (!tree.length) return;
     this.menuOpen = true;
     this.setInteractive(true); // 菜单是窗口内 DOM：悬停期间整窗保持可交互，关闭后恢复命中区穿透
@@ -1581,6 +1661,16 @@ class PetSprite {
   onMenuAction(leaf, keepFacing) {
     this.closeMenu();
     if (!leaf || typeof leaf !== 'object') return;
+    if (leaf.action === 'third-party') {
+      // 第三方菜单项：只把 (owner, label) 交给宿主，具体做什么由注册方自己去查 /menu/events。
+      // 带上本窗口的宠物 id——同一条菜单项在不同宠物上被点，注册方要能分辨是哪只。
+      if (leaf.owner) {
+        S.postAction(BASE + '/menu/click', { owner: leaf.owner, label: leaf.label, pet: this.pet.id }).catch(() => {
+          /* 上报失败不影响本地：注册方下次轮询自然拿不到这次触发 */
+        });
+      }
+      return;
+    }
     if (leaf.action === 'open-site') {
       if (window.petBridge) window.petBridge.openDshSite(ORIGIN); // 系统默认浏览器打开（等效 Ctrl+点击链接）
       return;
@@ -1777,10 +1867,15 @@ class PetSprite {
       slot === 'whisper' || slot === 'work' || (slot === 'balance' && this.balanceWrap),
     );
     this.bubble.classList.toggle(S.MEME_BUBBLE_CLASS, !!whisperImg);
+    // 可点/展开两个状态类：可点 → 气泡参与命中区（见 syncInputRegions）；展开 → 三窗口排版与更宽的盒
+    const clickable = slot === 'balance' && this.balanceClickable();
+    this.bubble.classList.toggle('is-clickable', clickable);
+    this.bubble.classList.toggle('is-expanded', clickable && this.balanceExpanded);
     if (slot === 'none') {
       // 三者都没有可显示的内容：隐藏（不占位，也就不会挡住任何一层）
       this.bubble.classList.remove('is-on');
       window.__dshPetDebug.lastBubbleTitle = '';
+      this.syncInputBusy(); // 气泡没了 → 撤销它的控件矩形与 busy 标记（否则整窗还留着可点区域）
       return;
     }
     this.bubble.innerHTML = '';
@@ -1797,7 +1892,11 @@ class PetSprite {
       line.textContent = this.whisperView[0]?.text ?? '';
       this.bubble.appendChild(line);
     } else {
-      const rows = this.balanceView;
+      // 展开态的行在这里现算：renderBubble 是只读渲染路径，不缓存（余额每轮都在变，缓存反而要同步失效）
+      const rows =
+        clickable && this.balanceExpanded && this.balanceState
+          ? S.balanceDetailView(this.balanceState)
+          : this.balanceView;
       const hasTier = rows.some((r) => r.role === 'tier');
       if (hasTier) {
         // deepseek 余额单行：余额（峰/谷）¥x — 档位字着色
@@ -1812,6 +1911,30 @@ class PetSprite {
         this.bubble.appendChild(line);
       } else {
         for (const r of rows) {
+          // 展开态一行 = 一个窗口：窗口名 + 进度条 + 已用百分比 + 重置倒计时（四段 flex 同行，
+          // 条吃剩余宽度，故条长 = 已用比例）。与浏览器 bubble.ts 的 DOM 结构一一对应。
+          if (r.role === 'quota') {
+            const row = document.createElement('div');
+            row.className = 'pet-bub-quota';
+            const label = document.createElement('span');
+            label.className = 'pet-bub-quota-label';
+            label.textContent = r.label;
+            const bar = document.createElement('span');
+            bar.className = 'pet-bub-quota-bar';
+            const fill = document.createElement('i');
+            fill.className = 'pet-bub-quota-fill pet-bub-quota-' + r.tone;
+            fill.style.width = Math.max(0, Math.min(100, r.percent)) + '%';
+            bar.appendChild(fill);
+            const used = document.createElement('span');
+            used.className = 'pet-bub-quota-used';
+            used.textContent = r.usedText;
+            const reset = document.createElement('span');
+            reset.className = 'pet-bub-quota-reset';
+            reset.textContent = r.resetText;
+            row.append(label, bar, used, reset);
+            this.bubble.appendChild(row);
+            continue;
+          }
           const div = document.createElement('div');
           if (r.role === 'error') div.className = 'pet-bub-err';
           else if (r.role === 'sub') div.className = 'pet-bub-row pet-bub-sub';
@@ -1823,5 +1946,8 @@ class PetSprite {
     }
     this.bubble.classList.add('is-on');
     window.__dshPetDebug.lastBubbleTitle = this.bubble.textContent.slice(0, 60);
+    // 气泡内容/尺寸变了 → 重报控件矩形（可点的余额气泡要靠它拿点击），并同步 busy 标记。
+    // 这里是所有显隐/换内容的汇聚点，放在这里就不会漏掉任何一条路径。
+    this.syncInputBusy();
   }
 }

@@ -125,6 +125,8 @@ PetSprite.prototype.showBalanceNotice = function showBalanceNotice(state, manual
   this.bubbleOn = true;
   this.balanceWrap = true; // 文字说明可能多行：renderBubble 据此套用紧凑变体（字号缩到 0.75、宽度下限更窄）
   this.balanceView = S.balanceBubbleView(state);
+  this.balanceState = state; // 留着：不可用状态不可展开，但要防止上一次的余额读数残留在字段里
+  this.balanceExpanded = false; // 文字说明没有展开态
   this.renderBubble();
   if (this.bubbleTimer !== null) window.clearTimeout(this.bubbleTimer);
   this.bubbleTimer = window.setTimeout(() => {
@@ -214,6 +216,8 @@ PetSprite.prototype.showBalanceNow = function showBalanceNow(state, manual) {
   this.bubbleOn = true;
   this.balanceWrap = false; // 正常余额气泡用常规尺寸，别继承上一次文字说明的紧凑变体
   this.balanceView = S.balanceBubbleView(state);
+  this.balanceState = state; // 展开态要拿完整读数现算三窗口行（balanceView 只是收起态那两行）
+  this.balanceExpanded = false; // 新一轮查询一律从收起态开始（与浏览器一致）
   this.renderBubble();
   // 气泡 10s 定时消失（与动画解耦：即使动画被点击/拖拽打断，气泡也按时收起；重复触发先清旧定时器）
   if (this.bubbleTimer !== null) window.clearTimeout(this.bubbleTimer);
@@ -238,6 +242,29 @@ PetSprite.prototype.showBalanceNow = function showBalanceNow(state, manual) {
   const name = S.pickSlot(slot, this.anim); // 数组槽位档内随机抽 1，且避开当前正播动画（避免连续重复，与浏览器一致）
   this.stopMove();
   this.playOnce(name);
+};
+
+// 点余额气泡：展开/收起三窗口完整读数（与浏览器 src/client/bubble.ts 同一套语义）。
+// 两件事一起做：
+//  - 淡出 → 换内容 → 淡入：先在 .is-fading 里把 opacity 降到 0，250ms 后才重绘内容，
+//    否则内容会在半透明时被替换 = 看得见的硬切；
+//  - 重置 10s 气泡定时器：不重置的话，第 8 秒才点开就只剩 2 秒，"看完整信息"这个目的就落空了。
+// 命中区由 renderBubble 末尾的 syncInputBusy() 重报（is-clickable 变化会连带控件矩形变化）。
+PetSprite.prototype.toggleBalanceDetail = function toggleBalanceDetail() {
+  if (!this.balanceClickable()) return;
+  this.balanceExpanded = !this.balanceExpanded;
+  this.bubble.classList.add('is-fading');
+  if (this.balanceFadeTimer !== null) window.clearTimeout(this.balanceFadeTimer);
+  this.balanceFadeTimer = window.setTimeout(() => {
+    this.balanceFadeTimer = null;
+    this.bubble.classList.remove('is-fading');
+    this.renderBubble(); // 重绘内容 + 重报控件矩形（展开态宽度变了，矩形也得跟着变）
+  }, BALANCE_FADE_MS);
+  if (this.bubbleTimer !== null) window.clearTimeout(this.bubbleTimer);
+  this.bubbleTimer = window.setTimeout(() => {
+    this.bubbleOn = false;
+    this.renderBubble();
+  }, BUBBLE_DURATION_MS);
 };
 
 // ---------- 轮询组装（容器统一拉取/触发，与浏览器 PetMulti 同一套路径；boot 成功后调用） ----------
@@ -355,6 +382,13 @@ function applyLockLeaf(petId, leaf) {
   }
 }
 
+/** 第三方菜单快照叶子 → 灌进各宠物（右键菜单据此拼「更多」）。
+ *  与上面那些"指令"不同，这是**当前状态**：注册/覆盖时写一次，所有窗口共用同一份快照。 */
+function applyMenuLeaf(leaf) {
+  const items = S.readMenuItems(leaf ? leaf.data : null);
+  for (const s of sprites) s.menuItems = items;
+}
+
 /** 跑一拍 /state。返回 true = "按长轮询命中"（宿主支持长轮询，可以立刻再请求） */
 async function pollStateOnce() {
   try {
@@ -369,12 +403,15 @@ async function pollStateOnce() {
     if (stateLongPoll) stateSince = s.counter;
     if (stateBaseline === null) {
       stateBaseline = S.flattenCounters(s); // 首拉：只记基线，不渲染（避免启动/重载时重放旧气泡）
+      // 第三方菜单项是**当前状态**不是事件：首拉就要装上，否则 helper 重启后要等下次注册才出现
+      applyMenuLeaf(s.sections ? s.sections.menu : null);
       return true;
     }
     for (const change of S.takeChanged(s, stateBaseline)) {
       if (change.leaf.data === null) continue;
       if (change.path === 'sections.balance') applyBalanceLeaf(change.leaf);
       else if (change.path === 'sections.workStatus') applyWorkStatusLeaf(change.leaf);
+      else if (change.path === 'sections.menu') applyMenuLeaf(change.leaf);
       else if (change.path.startsWith('pets.') && change.path.endsWith('.say')) {
         // 宠物 id **允许含点号**：按前缀/后缀切片，绝不 split('.')
         applySayLeaf(change.path.slice('pets.'.length, -'.say'.length), change.leaf);

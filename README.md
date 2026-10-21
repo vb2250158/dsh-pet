@@ -4,6 +4,10 @@ This maintenance fork integrates upstream changes while keeping the DSH font as 
 
 本维护版同步上游更新，默认沿用 DSH 字体，并保留深色文字和碎碎念至少 12px 的可读性设置；字体仍可配置。
 
+`0.3.7-fork.7` integrates upstream through `7f54ef7`: expandable quota bubbles, per-pet personas, renderer-specific animation formats, registered menus, work-status updates and slingshot gestures. The fork keeps host fonts, readable bubbles and its existing configuration and memory behavior.
+
+`0.3.7-fork.7` 合入上游至 `7f54ef7`：额度展开、独立宠物人设、按渲染端选择动画格式、注册菜单、工作状态接口和弹弓手势；保留本机字体、气泡可读性及既有配置和记忆行为。
+
 <p align="center">
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-pet?label=npm&color=blue"></a>
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm monthly downloads" src="https://img.shields.io/npm/dm/dsh-pet?label=%E6%9C%88%E4%B8%8B%E8%BD%BD&color=brightgreen"></a>
@@ -113,7 +117,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet/dsh-pet
 
 ## 💬 反馈与发版节奏
 
-欢迎提 [issue](https://github.com/PC2005-cloud/dsh-pet/issues) 与 PR——bug、体验问题、优化想法都行。但动手前请先翻一眼 [提交记录](https://github.com/PC2005-cloud/dsh-pet/commits/main)，确认不是已经修掉的同款问题（有些问题可能已经在 `main` 上修好了，只是还没发版）。
+欢迎提 [issue](https://github.com/PC2005-cloud/dsh-pet/issues) 与 PR——bug、体验问题随时反馈。**新功能请先开 issue** 说明使用场景，由维护者判断是否实现、以及放在插件本体还是作为第三方扩展，不要在确认前直接提交实现 PR。与桌宠本身关系不大、或实现特别复杂的功能，通常不会进本体，而是通过现有接口由第三方扩展实现。动手前也请先翻一眼 [提交记录](https://github.com/PC2005-cloud/dsh-pet/commits/main)，确认不是已经修掉的同款问题（有些问题可能已经在 `main` 上修好了，只是还没发版）。
 
 - **小修不单独发版**：不影响使用的小 bug 与优化会**累计**到下一个版本一起发，避免版本更迭过于频繁。所以「`main` 上已经修了」不等于「你装的这版已经包含」——`latest` 没更新时，以 `main` 的提交记录为准。
 - **想立刻用上未发布的修复**：按上面的「从源码安装」把插件指向本地仓库即可；注意**宿主半侧**的代码改动要**重开 DSH** 才生效（浏览器半侧刷新页面即可）。
