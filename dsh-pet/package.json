@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet",
-  "version": "0.3.7-fork.8",
+  "version": "0.3.8-fork.1",
   "description": "吃白饭的蓝色大肥鱼，赖在 DeepSeek Harness 里不走了。平时爱玩魔方、爱吃各种零食、偶尔打个盹，闲不住就在桌面上溜达两圈，被你拖来甩去也照旧赖着；你忙起来它跟着忙前忙后，也会帮你打理余额钱包，闲下来爱碎碎念，还乐意陪你唠两句。",
   "icon": "assets/logo.png",
   "keywords": [
@@ -79,6 +79,8 @@
     "ensure:electron": "node scripts/ensure-electron.mjs",
     "start:desktop": "node scripts/start-desktop.mjs",
     "standalone": "node lib/standalone.js",
+    "start:app": "node scripts/start-app.mjs",
+    "dist": "node scripts/dist.mjs",
     "dev:mock": "node scripts/dev/mock-server.mjs",
     "build": "node scripts/prepare.js",
     "prepack": "npm run build && npm run typecheck && npm run lint && npm run format:check && node scripts/prepack-check.js && npm run check:openapi",
@@ -140,6 +142,7 @@
     "@types/node": "^26.2.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^10.9.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "js-yaml": "^5.4.2",

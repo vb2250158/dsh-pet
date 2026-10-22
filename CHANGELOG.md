@@ -1,5 +1,10 @@
 # Fork changes
 
+## 0.3.8-fork.1 (2026-10-23)
+
+- Integrate upstream 0.3.8 modifier-click navigation, string-safe JSONC comments, optional single-process app packaging, Electron download progress, tool-detail work status and the configurable system tray. Retain host fonts, readable bubbles, prior wallet behavior and user configuration and memories. The normal DSH plugin path still launches through its profile; the standalone app is optional.
+- 合入上游 0.3.8 修饰键导航、JSONC 字符串安全、可选单进程应用打包、Electron 下载提示、工具详情及托盘开关；保留宿主字体、可读气泡、钱包行为、用户配置和记忆。常规 DSH 插件仍通过 profile 启动，独立应用为可选入口。
+
 ## 0.3.7-fork.8 (2026-10-22)
 
 - Integrate upstream points balances, disposable third-party balance provider registration, synthetic Cordis examples and host/client service documentation. Retain money-wallet behavior, host fonts, readable bubbles and existing pet configuration and memories. The old balance module is split into shape-specific handlers; published imports continue to resolve through the shared balance entry.

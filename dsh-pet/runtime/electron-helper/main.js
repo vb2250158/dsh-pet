@@ -73,7 +73,16 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 // 显式定名：Helper 是被 `electron.exe <main.js>` 直接拉起的，Electron 取不到 app 名会回落成
 // "Electron"，userData 便落到 %APPDATA%\Electron —— 那是所有这么跑的 Electron 脚本的公共目录，
 // 我们的 DPI 缓存与 Chromium profile 都会和别人混在一起。必须赶在任何 getPath('userData') 之前设。
+// 应用模式：本文件被 `src/app/main.ts` 直接 import 进同一进程（独立应用，不 spawn 子进程）。
+// 双击启动的用户没有终端可按 Ctrl+C，托盘上必须有一个「退出」，否则只能去任务管理器杀进程。
+// DSH 内的桌面模式不设这个变量，托盘形态与 userData 目录都保持原样。
+const APP_MODE = process.env.DSH_PET_APP_MODE === '1';
+// 名字必须与 src/host/storage-paths.ts 的 DESKTOP_APP_NAME 逐字一致
+// （storage-paths.test.ts 会直接读本文件比对，改名不同步测试就红）。
 app.setName('dsh-pet-electron-helper');
+// 应用模式只改**数据目录**，不改应用名：独立应用与 DSH 内的 helper 若共用同一个 userData，
+// 两个 Chromium 进程会抢同一份 profile（单例锁）互相踢。名字不动也就不会触发上面那个防漂移测试。
+if (APP_MODE) app.setPath('userData', path.join(app.getPath('appData'), 'dsh-pet'));
 
 /** DPI 探测子进程模式：不建窗口，只把主屏 scaleFactor 打到 stdout 就退出（见 probePrimaryScale） */
 const DPI_PROBE = process.env.DSH_PET_DPI_PROBE === '1';
@@ -532,7 +541,9 @@ function createPetWindows() {
       offBodyMs.delete(win.id);
     });
     win
-      .loadFile('index.html', {
+      // 绝对路径：本文件现在有两条运行方式（被宿主 spawn / 被 lib/app.js 同进程 require），
+      // 相对路径会按 Electron 的 app 路径解析——同进程时那是 lib/，必然 ERR_FILE_NOT_FOUND。
+      .loadFile(path.join(__dirname, 'index.html'), {
         query: {
           configUrl,
           bridge: BRIDGE ? '1' : '0',
@@ -663,8 +674,10 @@ async function handleBridgeRequest(request) {
 // ---------- 系统托盘：桌面端显示开关 ----------
 // 为什么托盘放在本进程：它是桌面模式唯一「不进浏览器」的入口。某只宠物的 display 被改成
 // web/none 之后，它在桌面上就没有窗口了，**它自己的右键菜单也跟着消失**；托盘是此时唯一还能
-// 把它切回桌面的地方（宿主的设置页要开浏览器）。所以本进程在「一只桌面宠物都没有」时也必须
-// 活着——宿主侧的判据是 desktopModeEverActive（见 src/host/index.ts）。
+// 在桌面侧把它切回桌面的地方（宿主的设置页要开浏览器，网页端宠物的右键菜单也得先开浏览器）。
+// 但它不是非有不可：main 条目的 `trayEnabled` 为 false 时不建托盘（默认 true，见下 startTray）。
+// 这种情况下宿主也不会为它常驻——判据是 desktopModeEverActive && trayEnabled（src/host/index.ts）：
+// 托盘关掉后已经没有需要保住的东西，让本进程活着只是白烧一个空进程。
 // 数据不新增任何通道：读配置与写回都走渲染端在用的同一条 bridge（手动 start-desktop 流退回 HTTP）。
 // 菜单是静态的，但每次切换 display 都会让宿主重启本进程（syncDesktop），新进程按新配置重建菜单，
 // 所以这里不需要任何「重建菜单刷新勾选」的逻辑。
@@ -725,6 +738,10 @@ async function startTray() {
     }
     const resp = await hostRequest('GET', PET_ROUTE + '/config');
     const merged = JSON.parse(resp.body || '{}');
+    // 托盘开关（main 条目的 trayEnabled）：只有**显式 false** 才不建——缺失或写坏时保持建，
+    // 免得一份老配置/一个错值让托盘无声消失（非法值的告警由宿主读取侧统一报）。
+    // 与下面的 pets 取自同一份成品配置，不新增任何通道。
+    if (merged && merged.main && merged.main.trayEnabled === false) return;
     // 成品聚合的形状是 { <条目>: <整份配置文档> }——**顶层键不是宠物**，宠物在各条目的
     // `pets` 数组里。与渲染端同一契约（renderer.js 的 loadConfig → S.flattenConfigPets，
     // 规则源码见 src/shared/config.ts:26）。托盘只要 id/name/display，故不吹条目级字段。
@@ -742,14 +759,15 @@ async function startTray() {
     tray = new Tray(trayIcon());
     tray.setToolTip('dsh-pet 桌面宠物');
     tray.setContextMenu(
-      Menu.buildFromTemplate(
-        pets.map((pet) => ({
+      Menu.buildFromTemplate([
+        ...pets.map((pet) => ({
           label: pet.name || pet.id,
           type: 'checkbox',
           checked: isDesktopDisplay(pet.display),
           click: () => traySetPetDisplay(pet.id, toggleDisplay(pet.display)),
         })),
-      ),
+        ...(APP_MODE ? [{ type: 'separator' }, { label: '退出', click: () => app.quit() }] : []),
+      ]),
     );
     // Windows 上 setContextMenu 只接管右键，左键默认什么都不做（macOS 相反：左键即弹菜单）
     if (TRAY_PLATFORM.leftClickPopsMenu) tray.on('click', () => tray.popUpContextMenu());
@@ -791,7 +809,8 @@ app.whenReady().then(() => {
     startBridgeCallback(); // 宿主应答回调服务器（stdin 在 Electron 主进程不可用，改走本地 HTTP）
   }
 
-  // macOS：桌面宠物不该占 Dock——托盘才是桌面端的常驻入口，Dock 里多一个图标只会碍事
+  // macOS：桌面宠物不该占 Dock——Dock 里多一个图标只会碍事。**不跟 trayEnabled 联动**：
+  // 宠物本体的右键菜单在，桌面侧仍能操作（只有「宠物全不在桌面」时才真正没有入口，那是另一件事）。
   if (TRAY_PLATFORM.hideDock && app.dock) app.dock.hide();
 
   // 托盘：不 await（建窗与建托盘互不依赖），内部自己等 bridge 回调服务就绪

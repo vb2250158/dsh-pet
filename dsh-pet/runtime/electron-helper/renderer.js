@@ -18,7 +18,7 @@
  *     都跨屏（#43，宠物可被甩/拖到其它显示器）；单显示器时即主屏工作区，行为不变。
  *     外扩区透明且点击穿透（只有身体命中区可交互），不挡下层应用。
  *   - 右键级联菜单（与浏览器共用同一份组件：树+渲染+样式来自 shared-core 的 menu 模块）：
- *     右键宠物弹出，桌面端工具根项「打开网站 / 打开 DeepSeek Harness（宿主是 DSH 桌面应用时的同一项）/ 查看余额 / 回到初始位置 / 重载配置」+ 动作点播；
+ *     右键宠物弹出，桌面端工具根项「打开网站 / 打开软件（宿主是 DSH 桌面应用时的同一项）/ 查看余额 / 回到初始位置 / 重载配置」+ 动作点播；
  *     菜单开启期间整窗保持可交互（悬停菜单不触发穿透翻转），关闭/离开窗口即恢复穿透。
  *   - 系统通知不是宠物行为（浏览器半侧 notify.ts 负责），桌面端不重复实现。
  */
@@ -87,10 +87,11 @@ async function boot() {
       // （全 web 时宿主传 []，main.js 建 0 个窗口，本函数根本不会跑）；
       // 只有手动 start-desktop（没有 DSH_PET_PETS）会回落出一只默认窗口而与配置脱钩。
       // 脱钩不该报错——没有桌面宠物就表示这个窗口没活儿干：安静关掉，不弹条、不重试。
-      // 托盘会留着（startTray 只看配置里有没有宠物，与 display 无关）；宿主流由
-      // syncDesktop() 在配置变化时重建 helper，手动流则需自行重启。
+      // 托盘是否还在看 main 条目的 trayEnabled：开着且桌面模式曾启用过，宿主持久保留 Helper
+      // （托盘因此还在）；关掉则宿主不再为它常驻，宠物全下线时 Helper 一起退出。
+      // 宿主流由 syncDesktop() 在配置变化时重建 helper，手动流则需自行重启。
       hideError();
-      console.info('[dsh-pet] no desktop pets; closing this helper window (tray stays)');
+      console.info('[dsh-pet] no desktop pets; closing this helper window (tray kept only if trayEnabled)');
       window.close();
       return;
     }

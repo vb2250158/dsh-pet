@@ -147,6 +147,7 @@ import {
   type HostWorkStatusState,
   type WorkStatusTurnContext,
 } from './work-status';
+import { toolDetailFromEvent } from './tool-detail';
 import {
   agentErrorFrame,
   hasBlockingActivity,
@@ -163,6 +164,7 @@ import { composeSystemPrompt, petPersona } from './persona';
 import {
   HelperProcess,
   defaultElectronExe,
+  dshHomeDir,
   electronLandingDir,
   ensureElectronDownload,
   hasGraphicalDisplay,
@@ -388,15 +390,16 @@ export function apply(ctx: any): void {
   // **忙碌档抖动抑制（滞回）**：工具秒回时 `tool/call` 报 working、`tool/result` 报 result，
   // 一次回复里能来回切十几次；每切一次前端就把 10s 的片段从第 0 帧重播，观感即"一秒一刀"
   // （实测 6 次快工具调用 → 13 次换片，working 每次只活 1~2 秒）。
-  // 这里只压 **working ↔ result 这对忙碌档之间的互切**：距上次写入不足 WORK_STATE_GAP_MS
-  // 就先不写，**但不丢**——挂一个 trailing 定时器，到点重新取快照补写，所以最终状态一定落地，
-  // 只是最多晚 GAP。
+  // 判据**只看档位与时间**：距上次写入不足 WORK_STATE_GAP_MS 的 working ↔ result 互切
+  // **整条不写**（档位与文案一起压住），挂一个 trailing 定时器到点重新取快照补写，
+  // 所以最终状态一定落地，只是最多晚 GAP。
+  // 不把「文案没变」当条件：现在每个 tool/call 都会换文案，那个条件会恒为假、一次都压不住；
+  // 文案随这次写入一起被压住，是这条规则的必然结果（不是遗漏）。
   //
   // 刻意**不压**的对象（"写完立刻可见"是既有契约，动它会把一串宿主回归测试打翻）：
   //   - 回空闲 / 终态（success、error）：反馈不能迟到；
   //   - 任何进/出忙碌档以外的变化（thinking、waiting、…）；
-  //   - 任务文案变化（todo/write 的 task）：气泡文字优先于动画平滑，而且它可能伴随
-  //     "展示会话切到另一只"（同档但 task 不同），那不是抖动。
+  //   - **同档位内**的文案更新（working 期间换一句工具详情）：那不是档位切换，不参与节流。
   // 为什么压在这里而不是两个前端：网页 overlay 与桌面 helper 消费的是同一个叶子，
   // 一处压住两端同时生效，也不必在前端各维护一份状态机。
   const WORK_STATE_GAP_MS = 5000;
@@ -404,18 +407,18 @@ export function apply(ctx: any): void {
   const isBusyTier = (s: string | null): boolean => s === 'working' || s === 'result';
   let publishedWork = '\u0000';
   let publishedState: string | null = null;
-  let publishedTask: string | null = null;
   let publishedWorkAt = 0;
   let workFlushTimer: ReturnType<typeof setTimeout> | null = null;
   const publishWorkStatus = (): void => {
     const snap = workStatus.snapshot();
     const key = String(snap.state) + '\u0000' + String(snap.task);
     if (key === publishedWork) return;
-    // 抖动判定：文案没变、且前后都是忙碌档（同档已被上面的 key 短路掉，这里必是互切）
-    const churn = snap.task === publishedTask && isBusyTier(publishedState) && isBusyTier(snap.state);
+    // 抖动判定：前后都在忙碌档、且档位确实换了（同档只换文案不算抖动，照常立即写）
+    const busyFlip = isBusyTier(publishedState) && isBusyTier(snap.state) && snap.state !== publishedState;
     const wait = WORK_STATE_GAP_MS - (Date.now() - publishedWorkAt);
-    if (churn && wait > 0) {
-      // 压住这一拍：到点再取**最新**快照补写（不要在这里缓存 snap——期间可能又变了）
+    if (busyFlip && wait > 0) {
+      // 整条不写（档位与文案一起压住）：到点再取**最新**快照补写
+      // （不要在这里缓存 snap——期间可能又变了）
       workFlushTimer ??= setTimeout(() => {
         workFlushTimer = null;
         publishWorkStatus();
@@ -428,9 +431,39 @@ export function apply(ctx: any): void {
     }
     publishedWork = key;
     publishedState = snap.state;
-    publishedTask = snap.task;
     publishedWorkAt = Date.now();
     state.writeSection('workStatus', { state: snap.state, task: snap.task });
+  };
+  /** Electron 下载日志的收尾槽位保留时长（ms）：够看清「就绪 / 失败」，又不让这条日志一直盖住
+   *  随后真实的工作状态（终态档在渲染端本来也会 10s 自动收起气泡）。 */
+  const DOWNLOAD_SLOT_CLEAR_MS = 12 * 1000;
+  let downloadSlotTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * 写一条 Electron 下载日志进工作状态（前端当普通工作状态消费，**不改 /state 的 JSON 形状**）：
+   * 桌面版用户没有控制台，这是他们唯一能看到「后台在下什么」的地方。
+   *
+   * 借外部写入槽 `api`（与 `POST /work-status` 同一个槽位）：不新增 section、不新增槽位常量。
+   * 三个必须照做的细节：
+   *   1. **先 setState 再 setTask**——`setTask` 在条目不存在时直接返回 false，文本会被吞掉；
+   *   2. `seq` 必须递增——`setState` 在「同档位且 seq 不更新」时短路，而下载大部分时间都停在
+   *      `working` 一档，不推进 seq 就什么都不会发生；
+   *   3. 文案按 TASK_TEXT_MAX 截断（与 currentTaskFromTodo 同口径），否则气泡会被撑爆。
+   * `terminal` = 这次是收尾（就绪 / 失败）：留一小会儿再清槽，让用户看得见。
+   */
+  const reportDownload = (text: string, state: HostWorkStatusState, terminal = false): void => {
+    const points = Array.from(text);
+    const task = points.length > TASK_TEXT_MAX ? `${points.slice(0, TASK_TEXT_MAX).join('')}…` : text;
+    externalWorkSeq += 1;
+    workStatus.setState(EXTERNAL_WORK_SESSION, state, externalWorkSeq);
+    workStatus.setTask(EXTERNAL_WORK_SESSION, task);
+    publishWorkStatus();
+    if (!terminal) return;
+    if (downloadSlotTimer !== null) clearTimeout(downloadSlotTimer);
+    downloadSlotTimer = setTimeout(() => {
+      downloadSlotTimer = null;
+      if (workStatus.clear(EXTERNAL_WORK_SESSION)) publishWorkStatus();
+    }, DOWNLOAD_SLOT_CLEAR_MS);
+    downloadSlotTimer.unref?.(); // 别把这个定时器钉进宿主的事件循环（退出时不该等它）
   };
   // 占用锁（issue #122 第 4 项「独立动作/气泡占用」）：**内存态**一把锁 + TTL，第三方联动期间
   // 独占这只宠物——除持锁者外谁都动不了它（随机链、碎碎念、余额、工作状态一概让路）。
@@ -588,6 +621,24 @@ export function apply(ctx: any): void {
   /** 终态（success/error）展示窗口定时器：约 60s 后清掉该会话条目，陈旧完成态不再浮上来（Bug 2/3） */
   const terminalTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const TERMINAL_KEEP_MS = 60 * 1000;
+  /**
+   * 每会话最近一条 todo 文案（就是 issue #59 那份）：工具跑完要把气泡「还」给它。
+   * 没有这份缓存，`tool/result` 写 null 就只能回落到通用档位文案（「这一步处理好啦」），
+   * 用户刚看到的清单进度会被抹掉。
+   */
+  const lastTodoText = new Map<string, string | null>();
+  /**
+   * 每会话「正在跑、且气泡上有具体描述」的工具数（不是布尔）：并行工具调用时，先返回的那个
+   * 不该把仍在中途的另一个的具体描述顶掉——归零才恢复 todo 文案。
+   * 只统计**拿到了目标**的调用（`toolDetailFromEvent` 返回非 null）：没写出描述就不该占位，
+   * 否则一次没带参数的 `read` 会平白挡住 todo 文案。
+   */
+  const toolsInFlight = new Map<string, number>();
+  const bumpToolsInFlight = (sessionId: string, delta: number): void => {
+    const next = (toolsInFlight.get(sessionId) ?? 0) + delta;
+    if (next > 0) toolsInFlight.set(sessionId, next);
+    else toolsInFlight.delete(sessionId);
+  };
   /** 取消某会话待执行的终态清理：会话已回到非终态，那次清理到点后既不清理也不重排，留着只会误导 */
   const cancelTerminalCleanup = (sessionId: string): void => {
     const t = terminalTimers.get(sessionId);
@@ -604,6 +655,8 @@ export function apply(ctx: any): void {
       if (sessionState === 'success' || sessionState === 'error') {
         workStatus.clear(sessionId); // 条目连同它的任务详情文案一起消失，不残留到后续活动
         turnFlags.delete(sessionId);
+        lastTodoText.delete(sessionId); // 会话都没了，这两份按会话记的缓存也一起清（防泄漏）
+        toolsInFlight.delete(sessionId);
         publishWorkStatus(); // 清完要写 S：否则前端一直挂着那条陈旧完成态
       }
     }, TERMINAL_KEEP_MS);
@@ -943,15 +996,33 @@ export function apply(ctx: any): void {
   /**
    * 桌面模式是否**曾经**成功启动过（粘性，仅本插件生命周期内有效）。
    * 把「没有桌面宠物就不启动」放宽成「从来没有过桌面宠物才不启动」：桌面宠物被全部改成
-   * web/none 之后，Helper 仍会带着空宠物列表重启并常驻——因为托盘（桌面端显示开关）是此时
-   * 唯一还能把宠物切回桌面的入口，Helper 一退它就没了。
+   * web/none 之后，Helper 仍会带着空宠物列表重启并常驻——只为了把托盘（桌面端显示开关）留着，
+   * 那是此时唯一还能在**桌面侧**把宠物切回桌面的入口，Helper 一退它就没了。
+   * 但它只在托盘还开着时才值得：`trayEnabled` 为 false 时没人需要那个图标，常驻就只是空进程
+   * （0 窗口 / 0 托盘 / 0 Dock），于是判据收紧成 `desktopModeEverActive && trayOn`。
    * 纯浏览器用户（从未有过桌面宠物）不受影响：照旧不探测、不下载、不拉起 Electron。
    */
   let desktopModeEverActive = false;
+  /**
+   * 系统托盘是否开启（main 条目的 trayEnabled，缺失按开）。与 hasDesktopPet 同一次读盘取得——
+   * 它们在同一个判据里一起用，分两次读只会多解析一遍配置。
+   */
+  let trayOn = true;
   const refreshDesktop = (): void => {
     hasDesktopPet = false;
     try {
-      hasDesktopPet = effectivePetList().some((p) => isDesktopVisible(p.display));
+      const merged = readAllConfig(configPaths);
+      const pets = flattenPetList(merged);
+      const desktopPets = pets.filter((p) => isDesktopVisible(p.display));
+      hasDesktopPet = desktopPets.length > 0;
+      trayOn = merged.main?.trayEnabled !== false;
+      // 诊断日志（issue #168）：设置页显示「仅桌面」却始终没有 helper 进程时，这一行能立刻
+      // 分辨「宿主读到的 display 就是 web」还是「读到了 desktop」——此前这个判定完全不可见。
+      // 托盘开关同样只在这一行里可见：加了它之后「为什么没有托盘/为什么留着空进程」都靠这里看。
+      ctx.logger?.info?.(
+        `[dsh-pet] 桌面判定：pets=${pets.length}，桌面可见=${desktopPets.length}` +
+          `（${desktopPets.map((p) => String(p.id)).join(',') || '无'}）→ hasDesktopPet=${hasDesktopPet} tray=${trayOn}`,
+      );
     } catch (e) {
       ctx.logger?.warn?.(`[dsh-pet] 宠物配置非法，桌面模式已跳过：${e instanceof Error ? e.message : String(e)}`);
     }
@@ -975,14 +1046,42 @@ export function apply(ctx: any): void {
   let disposed = false;
   /** 「无图形环境」提示只在进程生命周期内打一次，避免守护循环刷屏 */
   let displayWarned = false;
+  /** 「无桌面宠物 → 跳过」的 info 只打一次：纯网页用户每次启动都会走这条短路，不该刷屏 */
+  let noDesktopSkipped = false;
+  /** webServer 端口等待次数：只用于日志节流，不改变重试行为 */
+  let portWaitAttempts = 0;
+  /**
+   * 宿主即应用（`src/app/main.ts`）：本进程**自己就是** Electron 主进程，窗口由它直接建。
+   *
+   * 这时两条旧路径都必须短路，而且缺一不可：
+   *   - `launchHelper` —— 否则会 spawn 第二个 electron.exe（同一个 exe 自我复制，用户看到两只宠物）；
+   *   - `startHelper`  —— 否则即使拦下 spawn，仍会走 `ensureElectronDownload()`，在用户机器上白下
+   *     一整套 Electron（实测 347 MB），双击启动变成一次大下载。
+   *
+   * 用环境变量而不是 ctx 服务：`apply()` 的 ctx 契约已经够大，不想为一个布尔再撑一次。
+   */
+  const inProcessHost = process.env.DSH_PET_IN_PROCESS === '1';
 
   /** 用已确认存在的 Electron 路径拉起桌面 Helper（每只桌面宠物一个局部小窗口）。 */
   const launchHelper = (electronPath: string | undefined): void => {
+    if (inProcessHost) return; // 应用模式：窗口由本进程建，绝不 spawn
     if (helper || disposed) return;
-    if (!hasDesktopPet && !desktopModeEverActive) return; // 无桌面宠物且桌面模式从未启用过：不启动
+    // 无桌面宠物时：只有「桌面模式曾启用过**且**托盘还开着」才值得为托盘常驻，否则不启动
+    if (!hasDesktopPet && !(desktopModeEverActive && trayOn)) return;
     const port = typeof ctx.webServer?.port === 'number' ? ctx.webServer.port : 0;
     if (!port || port <= 0) {
       // webServer 可能尚未完成监听（OS 分配端口时 port 短暂为 0）：延迟重试。
+      // 诊断日志（issue #168）：这条重试以前完全静默——端口长期不就绪时，桌面宠物
+      // 「连尝试都没有」且没有任何线索。这里只加可见性，重试节奏与次数保持原样。
+      portWaitAttempts += 1;
+      if (portWaitAttempts === 1) {
+        ctx.logger?.info?.(`[dsh-pet] webServer 端口尚未就绪（port=${String(port)}），每 500ms 重试拉起桌面 Helper`);
+      } else if (portWaitAttempts % 20 === 0) {
+        ctx.logger?.warn?.(
+          `[dsh-pet] 已等待 webServer 端口 ${(portWaitAttempts * 500) / 1000}s 仍未就绪` +
+            `（port=${String(port)}），桌面 Helper 尚未拉起`,
+        );
+      }
       if (!startRetryTimer) {
         startRetryTimer = setTimeout(() => {
           startRetryTimer = undefined;
@@ -992,6 +1091,7 @@ export function apply(ctx: any): void {
       }
       return;
     }
+    portWaitAttempts = 0;
     const origin = `http://127.0.0.1:${port}`;
     // 右键「打开网站」交出去的是裸 origin：DSH 只在 `GET /` 接受本进程的启动令牌，换发绑定 authority 的
     // 签名 Cookie，其余请求一律 401 —— 默认浏览器没有该 authority 的 Cookie 时必然打不开（#87）。
@@ -1056,8 +1156,20 @@ export function apply(ctx: any): void {
   /** 拉起桌面 Helper：先探测本机 Electron；缺失时进程内异步下载
    *  （不 spawn 子进程，CLI node 与 DSH Desktop 均适用），下载完成后自动拉起。 */
   const startHelper = (): void => {
+    if (inProcessHost) return; // 应用模式：不探测、不下载 Electron
     if (helper || electronEnsure || disposed) return;
-    if (!hasDesktopPet && !desktopModeEverActive) return; // 无桌面宠物且桌面模式从未启用过：不启动
+    if (!hasDesktopPet && !(desktopModeEverActive && trayOn)) {
+      // 诊断日志（issue #168）：这条短路以前完全静默，是「桌面模式凭空消失：无进程、无目录、
+      // 无提示」的直接成因。用 info 而非 warn——纯网页用户这是正常状态；只打一次避免刷屏。
+      // 托盘关掉后这里也会命中：没人需要那个图标，空常驻没有意义（见 desktopModeEverActive 注释）。
+      if (!noDesktopSkipped) {
+        noDesktopSkipped = true;
+        ctx.logger?.info?.(
+          `[dsh-pet] 无桌面宠物（display 均为 web/none）且无需保留托盘（tray=${trayOn}），已跳过桌面 Helper 启动`,
+        );
+      }
+      return;
+    }
     // 无图形显示环境（Linux 服务器 / 容器）：直接放弃，不探测、不下载、不拉起。
     // 否则 Electron 会「拉起即崩」，被守护循环反复重启并刷满 core dump。
     if (!hasGraphicalDisplay()) {
@@ -1075,13 +1187,23 @@ export function apply(ctx: any): void {
       launchHelper(found);
       return;
     }
-    console.warn(`[dsh-pet] Electron not found, downloading to ${defaultElectronExe()} ...`);
-    electronEnsure = ensureElectronDownload()
+    // 诊断日志（issue #168）：只报「没找到」不够用——最常见的情形是「文件明明存在」，
+    // 但不在实际查询的路径上（DSH_HOME 不一致）。把真正查的路径一起打出来。
+    ctx.logger?.warn?.(
+      `[dsh-pet] 未找到 Electron 可执行文件：DSH_HOME=${dshHomeDir()}，查找路径=${defaultElectronExe()}` +
+        `，DSH_PET_ELECTRON_PATH=${process.env.DSH_PET_ELECTRON_PATH ?? '(未设置)'}`,
+    );
+    ctx.logger?.warn?.(`[dsh-pet] 开始下载 Electron 到 ${defaultElectronExe()} ...`);
+    electronEnsure = ensureElectronDownload({
+      // 下载全过程写进工作状态气泡（用户没有控制台，只能靠它看进度与失败原因）
+      onLog: ({ text, level, done }) =>
+        reportDownload(text, level === 'warn' ? 'error' : done ? 'success' : 'working', done),
+    })
       .then((path) => {
         if (path) {
           launchHelper(path);
         } else {
-          console.warn(
+          ctx.logger?.warn?.(
             '[dsh-pet] Electron download failed; desktop pet unavailable. Set DSH_PET_ELECTRON_PATH and restart, or retry later.',
           );
         }
@@ -1191,7 +1313,7 @@ export function apply(ctx: any): void {
               status: 400,
               obj: {
                 error:
-                  'invalid pet config: expected { pets:[{name?,id,size,balanceEnabled,display,position:{corner,marginX,marginY}}] }（display 为 web/desktop/both/none 之一；可选顶层 notificationsEnabled / whisperImageEnabled / chatImageEnabled 布尔；可选宠物布尔 whisperEnabled / workStatusEnabled / fixedEnabled）',
+                  'invalid pet config: expected { pets:[{name?,id,size,balanceEnabled,display,position:{corner,marginX,marginY}}] }（display 为 web/desktop/both/none 之一；可选顶层 notificationsEnabled / whisperImageEnabled / chatImageEnabled / trayEnabled 布尔；可选宠物布尔 whisperEnabled / workStatusEnabled / fixedEnabled）',
               },
             };
           }
@@ -2294,11 +2416,13 @@ export function apply(ctx: any): void {
         // 会话没有活动条目（已空闲/已清理）→ 不动：它不会被展示，写进去只会成为一条"幽灵文案"。
         // 清单里再无 in_progress/pending 时 currentTaskFromTodo 返回 null，等于把旧文案清掉、
         // 气泡回落到档位文案（issue #59 缺陷 3：档位文案不该被一条历史记录永久屏蔽）。
+        const text = currentTaskFromTodo(event as { data?: { todos?: Array<{ status?: string; content?: string }> } });
+        // 缓存无条件更新：工具跑完要靠它把气泡恢复回来（见下方 tool/call 的接线）
+        lastTodoText.set(sessionId, text);
+        // 工具正在执行时不覆盖气泡：「修改 index.ts」比清单里那句更能说明此刻在动什么
+        if ((toolsInFlight.get(sessionId) ?? 0) > 0) return;
         if (workStatus.has(sessionId)) {
-          workStatus.setTask(
-            sessionId,
-            currentTaskFromTodo(event as { data?: { todos?: Array<{ status?: string; content?: string }> } }),
-          );
+          workStatus.setTask(sessionId, text);
           publishWorkStatus(); // 任务文案变化也要写 S（气泡内容靠它更新）
         }
         return;
@@ -2320,6 +2444,8 @@ export function apply(ctx: any): void {
         // 代价：goal 续跑这类多轮任务，每轮开头会回落一瞬档位文案，直到本轮（通常在开头几步内）
         // 再写一次 todo 清单。
         workStatus.setTask(sessionId, null);
+        lastTodoText.delete(sessionId); // 上一轮的清单文案，不该被下一轮的工具跑完时「恢复」回来
+        toolsInFlight.delete(sessionId); // 上一轮若有工具没等到 tool/result（被打断），别拖累这一轮
         publishWorkStatus(); // 清掉上一轮任务文案也要写 S
       }
       if (
@@ -2344,15 +2470,35 @@ export function apply(ctx: any): void {
         if (type === 'turn/end') {
           turnFlags.delete(sessionId);
           cancelTerminalCleanup(sessionId); // 条目都要清了，别留一个到点后无事可做的定时器
+          lastTodoText.delete(sessionId); // 按会话记的两份缓存跟着会话一起消失（防泄漏）
+          toolsInFlight.delete(sessionId);
           workStatus.clear(sessionId); // 条目连同任务详情文案一起消失（clear 内部会重算展示）
           publishWorkStatus(); // 回合被打断 → 回到空闲：前端据此收起常驻气泡
         }
         return;
       }
       const seq = Number((event as { seq?: unknown }).seq ?? 0);
-      // 同会话同状态不重复更新（防刷屏）；不同状态才改写并重算展示
-      if (!workStatus.setState(sessionId, next, seq)) return;
-      publishWorkStatus(); // 档位变了 → 写 S（前端据此切动画 + 气泡）
+      // 工具详情（「修改 index.ts」这类具体描述）：比通用档位文案有用得多，workStatusEnabled
+      // 的宠物直接把它当气泡文本。
+      // **必须在 setState 之后写**：`setTask` 要求会话条目已存在（work-status.ts:229），而条目
+      // 正是 setState 建出来的——顺序反了这一句会被静默丢弃（不报错，最难查的那种）。
+      const detail =
+        type === 'tool/call' ? toolDetailFromEvent(event as { data?: { name?: unknown; arguments?: unknown } }) : null;
+      const changed = workStatus.setState(sessionId, next, seq);
+      if (detail !== null) {
+        // 有具体描述才「占位」：占位期间 todo/write 不覆盖它（见 todo/write 分支）
+        bumpToolsInFlight(sessionId, 1);
+        workStatus.setTask(sessionId, detail);
+      } else if (type === 'tool/result') {
+        if ((toolsInFlight.get(sessionId) ?? 0) > 0) bumpToolsInFlight(sessionId, -1);
+        // 占位全清空：把气泡还给最近一条 todo 文案（没有就 null → 回落档位文案）
+        if ((toolsInFlight.get(sessionId) ?? 0) === 0) {
+          workStatus.setTask(sessionId, lastTodoText.get(sessionId) ?? null);
+        }
+      }
+      publishWorkStatus(); // 档位或文案变了 → 写 S（内容没变时它自己会短路，不产生多余写入）
+      // 同会话同状态不重复更新（防刷屏）：写已经落定，这里只负责跳过终态清理的重排
+      if (!changed) return;
       // 终态只展示短暂窗口后自动清理：陈旧完成态不再浮上来（Bug 3 的一环，顺带缓解 Bug 2 残留）。
       // 回到非终态则取消那次待执行的清理——否则它到点时会话已非终态，既不清也不重排，
       // 条目（连同旧任务文案）就永久留下了。
@@ -2616,6 +2762,11 @@ export function apply(ctx: any): void {
     if (workFlushTimer !== null) {
       clearTimeout(workFlushTimer);
       workFlushTimer = null;
+    }
+    // 下载日志的「清槽」定时器：同上，卸载后它到点已经没有意义
+    if (downloadSlotTimer !== null) {
+      clearTimeout(downloadSlotTimer);
+      downloadSlotTimer = null;
     }
     // 占用锁：卸载时把锁全撤掉并写一次叶子——不写的话渲染端要等 TTL 到点才解除静止
     // （写叶子必须在 state.cancelAll() **之前**：那之后挂起的等待者已经收尾了）。
