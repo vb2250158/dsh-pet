@@ -4,9 +4,9 @@ This maintenance fork integrates upstream changes while keeping the DSH font as 
 
 本维护版同步上游更新，默认沿用 DSH 字体，并保留深色文字和碎碎念至少 12px 的可读性设置；字体仍可配置。
 
-`0.3.7-fork.7` integrates upstream through `7f54ef7`: expandable quota bubbles, per-pet personas, renderer-specific animation formats, registered menus, work-status updates and slingshot gestures. The fork keeps host fonts, readable bubbles and its existing configuration and memory behavior.
+`0.3.7-fork.8` integrates upstream through `71c7c54`: non-currency points balances and third-party balance providers join the existing controls, personas and animation features. The fork keeps host fonts, readable bubbles and its existing configuration and memory behavior.
 
-`0.3.7-fork.7` 合入上游至 `7f54ef7`：额度展开、独立宠物人设、按渲染端选择动画格式、注册菜单、工作状态接口和弹弓手势；保留本机字体、气泡可读性及既有配置和记忆行为。
+`0.3.7-fork.8` 合入上游至 `71c7c54`：新增积分余额与第三方余额服务注册，沿用已有控制、人设和动画功能；保留宿主字体、气泡可读性及既有配置和记忆行为。
 
 <p align="center">
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-pet?label=npm&color=blue"></a>

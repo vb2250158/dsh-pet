@@ -1,5 +1,10 @@
 # Fork changes
 
+## 0.3.7-fork.8 (2026-10-22)
+
+- Integrate upstream points balances, disposable third-party balance provider registration, synthetic Cordis examples and host/client service documentation. Retain money-wallet behavior, host fonts, readable bubbles and existing pet configuration and memories. The old balance module is split into shape-specific handlers; published imports continue to resolve through the shared balance entry.
+- 合入积分余额、可注销的第三方余额服务注册、合成 Cordis 示例及宿主/客户端服务说明；保留多币种钱包行为、宿主字体、可读气泡、已有配置和记忆。余额实现按形态拆分，公共入口保持一致。
+
 ## 0.3.7-fork.6 (2026-10-21)
 
 - Merge upstream multi-currency balance handling and the HTTP/Cordis integration references on top of 0.3.7-fork.5. Account and official API wallets retain each currency, aggregate matching account wallets and include bonus-only currencies. Bubble amounts and animation thresholds use each wallet's own currency and baseline.
