@@ -4,9 +4,9 @@ This maintenance fork integrates upstream changes while keeping the DSH font as 
 
 本维护版同步上游更新，默认沿用 DSH 字体，并保留深色文字和碎碎念至少 12px 的可读性设置；字体仍可配置。
 
-`0.3.8-fork.1` integrates upstream through `c696095`: modifier-click navigation, safe JSONC strings, optional standalone app packaging, download/task status and the tray switch. The fork keeps host fonts, readable bubbles, wallet behavior and existing pet configuration and memories.
+`0.3.8-fork.2` integrates upstream through `242fac1`: modifier-click navigation, safe JSONC strings, optional standalone app packaging, download/task status and the tray switch. The fork keeps host fonts, readable bubbles, wallet behavior and existing pet configuration and memories.
 
-`0.3.8-fork.1` 合入上游至 `c696095`：修饰键导航、JSONC 字符串修复、可选独立应用、下载/工具状态及托盘开关；保留宿主字体、气泡可读性、钱包行为及既有配置和记忆。
+`0.3.8-fork.2` 合入上游至 `242fac1`：修饰键导航、JSONC 字符串修复、可选独立应用、下载/工具状态及托盘开关；保留宿主字体、气泡可读性、钱包行为及既有配置和记忆。
 
 <p align="center">
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-pet?label=npm&color=blue"></a>
