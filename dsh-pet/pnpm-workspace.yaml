@@ -32,4 +32,5 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-util-values@0.2.0-rc.1'
   - openai@7.39.0
 overrides:
+  valibot: 1.4.2
   rolldown: 1.0.0-beta.7

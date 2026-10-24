@@ -4,6 +4,10 @@ This maintenance fork integrates upstream changes while keeping the DSH font as 
 
 本维护版同步上游更新，默认沿用 DSH 字体，并保留深色文字和碎碎念至少 12px 的可读性设置；字体仍可配置。
 
+`0.3.8-fork.4` pins the build-time Valibot dependency to 1.4.2. Installation peers come from the selected DSH runtime.
+
+`0.3.8-fork.4` 将构建依赖 Valibot 固定为 1.4.2；宿主依赖仍由选定的 DSH 运行时提供。
+
 `0.3.8-fork.3` integrates upstream through `4eb75e6`: custom multipage balances, bounded provider queries, serialized configuration updates, robust chat history and Electron cache, display/wake fixes, optional click sound and updated asset attribution. Host fonts, readable bubbles, wallet behavior and existing memories remain. The GPU sandbox stays enabled by default; only a diagnosed virtual-display failure may explicitly opt out with DSH_PET_GPU_SANDBOX=0.
 
 `0.3.8-fork.3` 合入上游至 `4eb75e6`：自定义多页余额、服务查询超时、串行配置更新、聊天历史及Electron缓存保护、显示器和唤醒修复、默认关闭点击音效与素材署名。保留宿主字体、可读气泡、钱包行为及已有记忆。GPU沙箱默认启用；仅已确认的虚拟显示器兼容问题可显式设置 DSH_PET_GPU_SANDBOX=0。

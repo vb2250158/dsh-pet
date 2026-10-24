@@ -1,5 +1,10 @@
 # Fork changes
 
+## 0.3.8-fork.4 (2026-10-25)
+
+- Pin build-time Valibot to 1.4.2 in both installation manifests; keep the existing bundler and GPU sandbox defaults. The selected DSH runtime owns its peer dependency versions.
+- 两份安装清单均固定构建依赖 Valibot 1.4.2；保留现有构建器及 GPU 沙箱默认值。DSH 宿主依赖由实际运行时提供。
+
 ## 0.3.8-fork.3 (2026-10-25)
 
 - Integrate 16 official commits through 4eb75e6: custom balance pages, provider timeouts, configuration serialization, invalid-history recovery, valid Electron caches, display topology and wake fixes, optional click sound and asset attribution. Preserve host fonts, readable bubbles and existing memories. Package the new sound asset in the root installation adapter.

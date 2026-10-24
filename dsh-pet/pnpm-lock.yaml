@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  valibot: 1.4.2
   rolldown: 1.0.0-beta.7
 
 importers:
@@ -1014,7 +1015,7 @@ packages:
   '@valibot/to-json-schema@1.0.0':
     resolution: {integrity: sha512-/9crJgPptVsGCL6X+JPDQyaJwkalSZ/52WuF8DiRUxJgcmpNdzYRfZ+gqMEP8W3CTVfuMWPqqvIgfwJ97f9Etw==}
     peerDependencies:
-      valibot: ^1.0.0
+      valibot: 1.4.2
 
   '@xmldom/xmldom@0.8.15':
     resolution: {integrity: sha512-/5NV/vDALVFDXgLmfsy9TRCBlKwO2LNBFzpzvb9iIj+jR+eSc6DLYYvVOdivT/jm7MtU6TebYuRmzEOI7w40UA==}
@@ -2447,8 +2448,8 @@ packages:
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
-  valibot@1.0.0:
-    resolution: {integrity: sha512-1Hc0ihzWxBar6NGeZv7fPLY0QuxFMyxwYR2sF1Blu7Wq7EnremwY2W02tit2ij2VJT8HcSkHAQqmFfl77f73Yw==}
+  valibot@1.4.2:
+    resolution: {integrity: sha512-gjdCvJ6d3RyHAneqxMYMW9QMCwYMb3jpOO0IyHZV1bnRHFBHrX3VkIILt5XYR0WhwHiH7Mty8ovuPZ/O3gamrg==}
     peerDependencies:
       typescript: '>=5'
     peerDependenciesMeta:
@@ -3460,9 +3461,9 @@ snapshots:
       '@typescript-eslint/types': 8.67.0
       eslint-visitor-keys: 5.0.1
 
-  '@valibot/to-json-schema@1.0.0(valibot@1.0.0(typescript@5.5.2))':
+  '@valibot/to-json-schema@1.0.0(valibot@1.4.2(typescript@5.5.2))':
     dependencies:
-      valibot: 1.0.0(typescript@5.5.2)
+      valibot: 1.4.2(typescript@5.5.2)
 
   '@xmldom/xmldom@0.8.15': {}
 
@@ -4741,8 +4742,8 @@ snapshots:
   rolldown@1.0.0-beta.7(typescript@5.5.2):
     dependencies:
       '@oxc-project/types': 0.61.2
-      '@valibot/to-json-schema': 1.0.0(valibot@1.0.0(typescript@5.5.2))
-      valibot: 1.0.0(typescript@5.5.2)
+      '@valibot/to-json-schema': 1.0.0(valibot@1.4.2(typescript@5.5.2))
+      valibot: 1.4.2(typescript@5.5.2)
     optionalDependencies:
       '@rolldown/binding-darwin-arm64': 1.0.0-beta.7
       '@rolldown/binding-darwin-x64': 1.0.0-beta.7
@@ -4992,7 +4993,7 @@ snapshots:
 
   util-deprecate@1.0.2: {}
 
-  valibot@1.0.0(typescript@5.5.2):
+  valibot@1.4.2(typescript@5.5.2):
     optionalDependencies:
       typescript: 5.5.2
 
