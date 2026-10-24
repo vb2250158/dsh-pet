@@ -15,7 +15,13 @@ import {
 } from '../shared/pickers';
 import { planMove } from '../shared/motion';
 import { flattenConfigPets, isWebVisible } from '../shared/config';
-import { balanceEventIndex, balancePercent, decideBalanceNotice, type BalanceState } from '../shared/balance';
+import {
+  balanceEventIndex,
+  balancePercent,
+  customViews,
+  decideBalanceNotice,
+  type BalanceState,
+} from '../shared/balance';
 // 轮询统一状态 S：前端唯一的数据来源与渲染入口（拉取 / 拍平 / 比对都在 shared，两端同一份）
 import {
   fetchState,
@@ -110,6 +116,32 @@ export type RuntimePet = Pet & {
 
 /** 本次会话已定论的动画扩展名（null = 尚未判断）。模块级：一次判断，整页复用。 */
 let resolvedExt: string | null = null;
+
+/** ---- 点击音效（内置 assets/sound/click-duck.wav）----
+ *  单例 <audio>：同一时刻只可能响一声（多开时也不会叠成一片），重播靠 currentTime 归零。
+ *  开关来自成品配置 main.clickSoundEnabled；100ms 内连点只响一次（快速点击/连点不轰炸）。
+ *  播放失败（自动播放策略、文件缺失）一律静默——音效是锦上添花，绝不能影响点击本身。 */
+const CLICK_SOUND_URL = '/dsh-pet-7340/sound/click-duck.wav';
+const CLICK_SOUND_VOLUME = 0.5;
+const CLICK_SOUND_THROTTLE_MS = 100;
+let clickAudio: HTMLAudioElement | null = null;
+let lastClickSoundAt = 0;
+/** 点击音效开关（成品配置 main.clickSoundEnabled，全局一份）：PetMulti 拉配置时写入，点击时读。
+ *  初值 false = 配置未加载前保守静音（新增音效默认不突袭用户）。 */
+let clickSoundEnabled = false;
+const playClickSound = (): void => {
+  const now = Date.now();
+  if (now - lastClickSoundAt < CLICK_SOUND_THROTTLE_MS) return;
+  lastClickSoundAt = now;
+  try {
+    clickAudio ??= new Audio(CLICK_SOUND_URL);
+    clickAudio.volume = CLICK_SOUND_VOLUME;
+    clickAudio.currentTime = 0;
+    void clickAudio.play().catch(() => {});
+  } catch {
+    /* 音频不可用：静默忽略 */
+  }
+};
 
 /** 是否该先要 mov：只有 macOS 上的 WebKit（Safari / WKWebView）需要 HEVC-with-Alpha。
  *  **不能用 canPlayType 判断**——Safari 能播 VP9 webm 却会丢弃 alpha（表现为黑底），
@@ -290,7 +322,7 @@ export function makePetUI(rt: {
     const [bubbleOn, setBubbleOn] = useState(false);
     // 余额气泡的展开态（点气泡 → 三窗口完整读数）。每次重新弹出都归位到收起态，
     // 否则上一次展开过，下一轮自动轮询一冒头就是展开的样子。
-    const [balanceExpanded, setBalanceExpanded] = useState(false);
+    const [balanceViewIndex, setBalanceViewIndex] = useState(0);
     const bubbleTimerRef = useRef<number | null>(null);
     // 碎碎念气泡（显隐定时器与余额气泡各自独立：10s 各自计时互不干扰；渲染走单槽优先级）
     const [whisperBubbleOn, setWhisperBubbleOn] = useState(false);
@@ -660,8 +692,10 @@ export function makePetUI(rt: {
       if (!balance || !balance.ok) return;
       if (!cfg.balanceEnabled && !balanceManual) return; // 自动轮询受开关门控；手动无条件通过
       const p = balancePercent(balance);
-      if (balanceManual || p !== undefined) {
-        setBalanceExpanded(false); // 新一轮查询一律从收起态开始（上次展开过也不延续）
+      // 自动轮询的弹出门槛：内置形态要求"有百分比依据"；**custom 不看百分比**——它的内容由第三方
+      // 设计，percent 只是可选的档位驱动，没有百分比照样是一份该显示的气泡。
+      if (balanceManual || p !== undefined || balance.shape === 'custom') {
+        setBalanceViewIndex(0); // 新一轮查询一律从第一页开始（上次翻到第几页也不延续）
         setBubbleOn(true);
         // 气泡 10s 定时消失（与动画解耦：即使动画被点击/拖拽打断，气泡也按时收起；重复触发先清旧定时器）
         if (bubbleTimerRef.current !== null) window.clearTimeout(bubbleTimerRef.current);
@@ -1952,6 +1986,8 @@ export function makePetUI(rt: {
       }
       stopThrow(); // 点击飞行中的宠物 = 收手停住（再播点击回应）
       stopMove();
+      // 点击音效：放在所有「不播点击动画」的早退分支之后——按下已触发积分的那次不响（粒子即反馈）
+      if (clickSoundEnabled) playClickSound();
       setOnce(true);
       if (!petAnims.clicks.length) return;
       const name = pick(petAnims.clicks);
@@ -2152,10 +2188,16 @@ export function makePetUI(rt: {
     // 优先级：终态任务 > 碎碎念/对话 > 余额 > 非终态任务。
     // 为什么终态任务不让位：完成/失败气泡只活 10s，被事件顶掉就彻底看不到了；非终态任务气泡
     // 常驻（不设自动收起），让位 10s 零损失。与桌面端 sprite.js 的 renderBubble 同一套优先级。
-    /** 点余额气泡：切换展开/收起，并把 10s 计时器重置一次
+    /** 余额气泡当前有几页：custom 取 views.length；内置 windows 是「收起 / 展开」两页；其余一页（不可点）。 */
+    const balancePageCount = (() => {
+      if (!balance || !balance.ok) return 1;
+      if (balance.shape === 'custom') return Math.max(1, customViews(balance)?.length ?? 1);
+      return balance.shape === 'windows' ? 2 : 1;
+    })();
+    /** 点余额气泡：切到下一页（末页回第一页），并把 10s 计时器重置一次
      *  （不重置的话，第 8 秒才点开就只剩 2 秒，"看完整信息"这个目的就落空了） */
     const toggleBalanceDetail = () => {
-      setBalanceExpanded((v) => !v);
+      setBalanceViewIndex((i) => (i + 1) % balancePageCount);
       if (bubbleTimerRef.current !== null) window.clearTimeout(bubbleTimerRef.current);
       bubbleTimerRef.current = window.setTimeout(() => setBubbleOn(false), BUBBLE_DURATION_MS);
     };
@@ -2179,8 +2221,8 @@ export function makePetUI(rt: {
         return h(BalanceBubble, {
           state: balance,
           on: bubbleOn,
-          expanded: balanceExpanded,
-          onToggle: toggleBalanceDetail,
+          index: balanceViewIndex,
+          onCycle: toggleBalanceDetail,
         });
       }
       if (workBubbleOn && workText && cfg.workStatusEnabled) {
@@ -2322,6 +2364,8 @@ export function makePetUI(rt: {
         if (typeof main !== 'object' || main === null) {
           throw new Error('配置响应不是成品聚合（host 版本不匹配？）');
         }
+        // 点击音效开关（全局一份，只读 main 条目）：非 true 一律静音，配置缺失时保守关闭
+        clickSoundEnabled = main.clickSoundEnabled === true;
         const flattened = flattenConfigPets(merged);
         petBridge.current = flattened;
         // 「添加宠物」模板 = main 条目 pets[0]（内置默认或用户覆盖后的主宠物）

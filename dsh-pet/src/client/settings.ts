@@ -267,6 +267,9 @@ export const zh = {
   userConfig: '用户配置（自定义覆盖）',
   animationDir: '动画素材目录（可自定义/扩充动画）',
   memesDir: '表情包目录（可自定义/扩充配图）',
+  logFile: '日志文件（排障用，可清空）',
+  logFileNote:
+    '桌面版没有控制台，插件的运行日志（启动、桌面宠物崩溃/重启、错误与告警）全部写进这一个文件；反馈问题请附上它。单文件上限 1 MB，写满只留最新的 512 KB。',
   saved: '已保存，桌宠即时生效。',
   loadError: '加载配置失败',
   saveError: '保存配置失败，请检查服务连接、配置目录的写入权限或服务日志。',
@@ -280,6 +283,9 @@ export const zh = {
     '另 {n} 只额外宠物由 pet/ 目录文件定义（<名>-config.json + <名>-animation/ + <名>-memes/），它们不在此列表——改文件后浏览器刷新页面、桌面端右键「重载配置」即可生效。',
   notifyToggle: '系统通知',
   notifyToggleHint: '对话完成 / 生成失败 / 权限申请 / 用户选择，在窗口失焦时弹出系统级通知（桌面右下角）。',
+  clickSoundToggle: '点击音效',
+  clickSoundToggleHint:
+    '点一下宠物播一声内置音效（assets/sound/click-duck.wav，音量 0.5；100ms 内的连续点击只响一次，多开也不会叠音）。关掉即完全静音。随「保存」写入用户配置。',
   whisperImageToggle: '碎碎念配图',
   whisperImageToggleHint:
     '碎碎念时从表情包池随机抽一张，连同那句话一起显示（图片映射在配置文件顶层 memes）。token：碎碎念本来就每次生成都要调一次模型，配图只是把抽中那张的名称+描述（约 100 字符 / ≈60 token）加进同一次请求，增量可忽略。',
@@ -452,6 +458,9 @@ export const en = {
   userConfig: 'User config (custom overrides)',
   animationDir: 'Animation assets dir (add/customize animations here)',
   memesDir: 'Meme images dir (add/customize images here)',
+  logFile: 'Log file (for troubleshooting; safe to clear)',
+  logFileNote:
+    'The DSH desktop app has no console, so every runtime log of the plugin (startup, desktop pet crashes/restarts, errors and warnings) goes into this single file — attach it when reporting a problem. It is capped at 1 MB; once full, only the latest 512 KB is kept.',
   saved: 'Saved — the pets updated instantly.',
   loadError: 'Failed to load config',
   saveError:
@@ -467,6 +476,9 @@ export const en = {
   notifyToggle: 'System notifications',
   notifyToggleHint:
     'OS-level toasts (bottom-right of the desktop) for conversation completion, failures, permission requests, and questions — only while this window is unfocused.',
+  clickSoundToggle: 'Click sound',
+  clickSoundToggleHint:
+    'Plays the built-in click sound (assets/sound/click-duck.wav, volume 0.5) when a pet is clicked; repeated clicks within 100ms play only once, so multiple pets never stack up. Turn it off for silence. Written to the user config together with Save.',
   whisperImageToggle: 'Whisper images',
   whisperImageToggleHint:
     'Attach one random meme from the pool to each whisper line (image mapping lives in the top-level `memes` config field). Tokens: a whisper already calls the model every cycle, so the image only appends the name + description of that one meme (~100 chars / ~60 tokens) to the same request — negligible.',
@@ -1009,6 +1021,8 @@ export function makePetConfigSection(rt: {
       animations: string;
       /** 用户表情包目录（$DSH_HOME/dsh-pet/memes：加图不必改包） */
       memes?: string;
+      /** 统一日志文件（$DSH_HOME/dsh-pet/logs.txt：桌面版没控制台，排障只看它） */
+      logs?: string;
       /** 插件落盘的全部位置（路径 + 是否已存在），host 按平台推导 */
       storage?: Array<{ key: string; path: string; exists?: boolean }>;
       /** 当前 profile 名（拼卸载命令用；反推不出时为空串） */
@@ -1027,6 +1041,10 @@ export function makePetConfigSection(rt: {
     // 拖拽落点清空、宠物跳回配置角落），于是"改个通知开关，桌面被重置"，与其它开关行为不一致。
     // 引擎重读放在 save() 成功之后（reloadNotifications）：保存后即时生效，无需刷新页面。
     const [notifyEnabled, setNotifyEnabled] = useState(true);
+    // 点击音效开关（全局：写用户级配置 main-config.jsonc 的 clickSoundEnabled）。
+    // 与通知开关同一套语义：只改本地状态，随「保存」整包写入（不做即时写入）。
+    // 初值 false = 内置默认（默认静音）；下面的加载效应会用成品 main.clickSoundEnabled 覆盖。
+    const [clickSound, setClickSound] = useState(false);
     // 表情包配图开关（全局：写用户级配置；与「保存」一起提交，不做即时写入）
     const [whisperImage, setWhisperImage] = useState(false);
     const [chatImage, setChatImage] = useState(false);
@@ -1074,6 +1092,7 @@ export function makePetConfigSection(rt: {
       setEntryPrompt(typeof m.whisperPrompt === 'string' ? m.whisperPrompt : '');
       setSelId((id) => (loadedPets.some((p) => p.id === id) ? id : (loadedPets[0]?.id ?? '')));
       if (typeof m.notificationsEnabled === 'boolean') setNotifyEnabled(m.notificationsEnabled);
+      if (typeof m.clickSoundEnabled === 'boolean') setClickSound(m.clickSoundEnabled);
       if (typeof m.whisperImageEnabled === 'boolean') setWhisperImage(m.whisperImageEnabled);
       if (typeof m.chatImageEnabled === 'boolean') setChatImage(m.chatImageEnabled);
       if (typeof m.confineToScreen === 'boolean') setConfineScreen(m.confineToScreen);
@@ -1269,6 +1288,8 @@ export function makePetConfigSection(rt: {
         const body: Record<string, unknown> = {
           pets: pets,
           notificationsEnabled: notifyEnabled,
+          // 点击音效开关（全局布尔）：与通知开关一起提交，宿主校验后写进用户层
+          clickSoundEnabled: clickSound,
           whisperImageEnabled: whisperImage,
           chatImageEnabled: chatImage,
           confineToScreen: confineScreen,
@@ -1716,6 +1737,7 @@ export function makePetConfigSection(rt: {
               className: 'dsh-pet-cfg__grid4',
               children: [
                 toggleCell('notifyToggle', notifyEnabled, busy, (v) => void toggleNotify(v)),
+                toggleCell('clickSoundToggle', clickSound, busy, setClickSound),
                 toggleCell('whisperImageToggle', whisperImage, busy, setWhisperImage),
                 toggleCell('chatImageToggle', chatImage, busy, setChatImage),
                 toggleCell('confineToggle', confineScreen, busy, setConfineScreen, true),
@@ -1898,6 +1920,12 @@ export function makePetConfigSection(rt: {
                 paths.memes
                   ? h('div', { className: 'dsh-pet-cfg__path', children: t('memesDir') + '：' + paths.memes })
                   : null,
+                // 日志文件：路径 + 一句说明。其余位置的用途都收在问号里，唯独这条写在明面上——
+                // 用户反馈「宠物不出现 / 闪退」时，第一件事就是让他把这个文件找出来
+                paths.logs
+                  ? h('div', { className: 'dsh-pet-cfg__path', children: t('logFile') + '：' + paths.logs })
+                  : null,
+                paths.logs ? h('div', { className: 'dsh-pet-cfg__note', children: t('logFileNote') }) : null,
               ],
             })
           : null,

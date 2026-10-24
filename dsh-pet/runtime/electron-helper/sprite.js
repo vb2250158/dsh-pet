@@ -13,6 +13,32 @@ const OPEN_SHORTCUT_HINT = /Mac/i.test(navigator.platform || navigator.userAgent
 /** 本次点击是否按住了「呼出 DSH」的修饰键（Ctrl / Cmd） */
 const isOpenShortcut = (e) => !!(e && (e.ctrlKey || e.metaKey));
 
+// ---------- 点击音效（内置 assets/sound/click-duck.wav） ----------
+// 与浏览器端 client/pet.ts 同一套参数：单例 <audio>、音量 0.5、100ms 节流、失败静默。
+// 复用素材通道：bridge 模式由主进程取回音频，普通模式仍走 HTTP。
+// 自定义协议已声明 stream / bypassCSP，无需另开未经宿主鉴权的 HTTP 请求。
+const CLICK_SOUND_URL = BASE + '/sound/click-duck.wav';
+const CLICK_SOUND_VOLUME = 0.5;
+const CLICK_SOUND_THROTTLE_MS = 100;
+let clickAudio = null;
+let lastClickSoundAt = 0;
+const playClickSound = () => {
+  // 开关来自成品配置 main.clickSoundEnabled（renderer.js 的 loadConfig 带入）；缺失一律静音
+  if (!config || config.clickSoundEnabled !== true) return;
+  const now = Date.now();
+  if (now - lastClickSoundAt < CLICK_SOUND_THROTTLE_MS) return;
+  lastClickSoundAt = now;
+  try {
+    clickAudio = clickAudio || new Audio(CLICK_SOUND_URL);
+    clickAudio.volume = CLICK_SOUND_VOLUME;
+    clickAudio.currentTime = 0;
+    const p = clickAudio.play();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+  } catch {
+    /* 音频不可用：静默忽略 */
+  }
+};
+
 // ---------- 单只宠物（行为与浏览器 PetCard 一致；纯逻辑来自 src/shared） ----------
 class PetSprite {
   constructor(pet) {
@@ -130,7 +156,7 @@ class PetSprite {
     this.balanceView = null;
     this.balanceWrap = false; // true = 当前余额气泡是不可用的「文字说明」（多行，需换行变体）
     this.balanceState = null; // 最近一次余额读数（展开态要用它算三窗口行；balanceView 只是收起态的行）
-    this.balanceExpanded = false; // 展开态：点一下气泡看三窗口完整读数（每次重新弹出都归位）
+    this.balanceViewIndex = 0; // 当前页：点一下气泡切下一页（内置 windows 是 收起/展开 两页；custom 是 views.length 页）
     this.balanceFadeTimer = null; // 展开/收起的淡出等待（250ms 后才换内容，避免硬切）
     this.prevTick = 0;
     // 说话（碎碎念 / 命令气泡 / 对话回复三合一）：文本/配图由容器统一轮询 /state 后经
@@ -450,16 +476,33 @@ class PetSprite {
    * 显示器几何变化（改分辨率/缩放、插拔屏、旋转）后就地重挂：
    * 抛掷空间作废，并把宠物从可能变成空洞的位置拉回可见区。
    * 拖拽中不动它（用户正握着，位置由指针决定）；飞行中也不动（下一帧物理自会按新边界夹取）。
+   *
+   * prevView 是**变化前**的视口原点/尺寸（renderer 在 applyDeskGeometry 之前取）。
+   * 宠物位置是「视口相对」坐标，而视口原点会随显示器拓扑平移（外接屏在主屏左侧时合盖，
+   * hull 原点从 −2560 变 0）。旧实现直接把旧坐标当新坐标去夹取：宠物被误判越界、夹到最近屏
+   * 边缘，夹取后的比例在新拓扑里又不对应原位置 —— 每开合一次漂一次（#193）。这里改由
+   * S.rebaseCenter 做「世界坐标守恒 + 越界才夹」，并把比例**无条件**跟着新视口重写。
    */
-  relayout() {
+  relayout(prevView) {
     this.space = null;
     if (this.dragState.active || this.throwRef !== null) return;
     this.stopMove();
-    const cx = this.pos.x + this.halfW;
-    const cy = this.pos.y + this.halfH;
-    const p = S.clampPointToRegion(AREAS, cx, cy);
-    if (p.x !== cx || p.y !== cy) {
-      this.customPos = { rx: p.x / VIEW.w, ry: p.y / VIEW.h };
+    if (!this.pos) {
+      // 还没摆过位（position() 首次调用前）：没有旧位置可守恒，直接按新几何定位
+      this.position();
+      return;
+    }
+    const from = prevView || VIEW;
+    const centerOld = { x: this.pos.x + this.halfW, y: this.pos.y + this.halfH };
+    const center = S.rebaseCenter(centerOld, from, VIEW, AREAS);
+    // 平移后（世界坐标守恒）本应落在的位置；与夹取结果不同 = 那块屏真的没了
+    const moved = { x: centerOld.x + from.x - VIEW.x, y: centerOld.y + from.y - VIEW.y };
+    const clamped = center.x !== moved.x || center.y !== moved.y;
+    // customPos 非空 = 用户摆过的位置，语义是「相对视口的比例」：视口变了就必须重写，
+    // 否则同一个比例在新视口里是另一个世界坐标。customPos 为空 = 角落模式：没越界就保持
+    // 「跟主屏角落」的配置语义，只有真的越界才转成锁定坐标。
+    if (this.customPos || clamped) {
+      this.customPos = { rx: center.x / VIEW.w, ry: center.y / VIEW.h };
     }
     this.position();
   }
@@ -1420,12 +1463,26 @@ class PetSprite {
   }
 
   /**
-   * 余额气泡此刻是否可点可展开：只有 windows 形态（三窗口读数）才有可展开的内容；
-   * money（账户余额）与不可用状态的文字说明点开也没有别的东西，保持不可点、继续穿透。
+   * 余额气泡当前有几页：custom 取 views.length；内置 windows 是「收起 / 展开」两页；其余一页。
+   * 只有一页 = 不可点（点开也没别的内容），气泡继续穿透、不挡页面。
+   */
+  balancePageCount() {
+    const s = this.balanceState;
+    if (!s || !s.ok) return 1;
+    if (s.shape === 'custom') {
+      const views = S.customViews(s);
+      return views ? Math.max(1, views.length) : 1;
+    }
+    return s.shape === 'windows' ? 2 : 1;
+  }
+
+  /**
+   * 余额气泡此刻是否可点切页：页数多于 1 且气泡正在显示。
+   * `custom` 的判定与浏览器 bubble.ts 完全一致（都是"多于 1 页"）。
    */
   balanceClickable() {
-    const s = this.balanceState;
-    return !!(this.bubbleOn && s && s.ok && s.shape === 'windows' && !this.balanceWrap);
+    if (!this.bubbleOn || this.balanceWrap) return false;
+    return this.balancePageCount() > 1;
   }
 
   /**
@@ -1590,6 +1647,8 @@ class PetSprite {
     }
     this.stopThrow(); // 点击飞行中的宠物 = 收手停住（再播点击回应）
     this.stopMove();
+    // 点击音效：与浏览器端同位置——放在「按下已触发积分」的早退之后、点击动画判断之前
+    playClickSound();
     if (!this.animations.clicks.length) return;
     this.pendingSquash = true; // 等新点击动画切到前台后 Q 弹（压新首帧，与浏览器一致）
     this.playOnce(S.pick(this.animations.clicks));
@@ -1867,6 +1926,29 @@ class PetSprite {
     });
   }
 
+  /**
+   * 自定义节点树 → DOM（custom 形态的渲染器，与浏览器 bubble.ts 的 treeToNodes 一一对应）。
+   *
+   * tag 与样式白名单在 shared 的解析层（parse.ts）已经裁过，这里只做映射：**不用 innerHTML**，
+   * 文本走 createTextNode —— 第三方交来的内容因而没有注入面。
+   * 样式键是 camelCase（与 React style 对象同形），直接 `el.style[key] = value` 即可。
+   */
+  renderTree(node) {
+    const el = document.createElement(node.tag);
+    if (node.style) {
+      for (const [key, value] of Object.entries(node.style)) el.style[key] = value;
+    }
+    if (node.tag === 'img') {
+      el.src = node.src || '';
+      el.alt = '';
+      return el;
+    }
+    // 文本与子节点可同时存在：先文本、后子节点（与 textContent + appendChild 的顺序一致）
+    if (node.text) el.appendChild(document.createTextNode(node.text));
+    for (const child of node.children || []) el.appendChild(this.renderTree(child));
+    return el;
+  }
+
   renderBubble() {
     // 气泡单槽：同一时刻只显示一个（优先级：终态任务 > 碎碎念/对话 > 余额 > 非终态任务）。
     // 为什么终态任务不让位：完成/失败气泡只活 10s，被事件顶掉就彻底看不到了；非终态任务气泡
@@ -1895,10 +1977,11 @@ class PetSprite {
       slot === 'whisper' || slot === 'work' || (slot === 'balance' && this.balanceWrap),
     );
     this.bubble.classList.toggle(S.MEME_BUBBLE_CLASS, !!whisperImg);
-    // 可点/展开两个状态类：可点 → 气泡参与命中区（见 syncInputRegions）；展开 → 三窗口排版与更宽的盒
+    // 可点/展开两个状态类：可点 → 气泡参与命中区（见 syncInputRegions）；index>0 → 更宽的盒与紧凑字号
     const clickable = slot === 'balance' && this.balanceClickable();
+    const expanded = clickable && this.balanceViewIndex > 0;
     this.bubble.classList.toggle('is-clickable', clickable);
-    this.bubble.classList.toggle('is-expanded', clickable && this.balanceExpanded);
+    this.bubble.classList.toggle('is-expanded', expanded);
     if (slot === 'none') {
       // 三者都没有可显示的内容：隐藏（不占位，也就不会挡住任何一层）
       this.bubble.classList.remove('is-on');
@@ -1919,10 +2002,16 @@ class PetSprite {
       line.className = 'pet-bub-row';
       line.textContent = this.whisperView[0]?.text ?? '';
       this.bubble.appendChild(line);
+    } else if (this.balanceState && S.customViews(this.balanceState)) {
+      // custom 形态：第三方自己的节点树（与浏览器 treeToNodes 同一套 tag/样式语义）。
+      // 页索引取当前页；页数变少时夹到最后一页，不显示上一轮的残页（与浏览器同一夹取规则）。
+      const views = S.customViews(this.balanceState);
+      const page = views[Math.min(this.balanceViewIndex, views.length - 1)];
+      if (page) this.bubble.appendChild(this.renderTree(page));
     } else {
       // 展开态的行在这里现算：renderBubble 是只读渲染路径，不缓存（余额每轮都在变，缓存反而要同步失效）
       const rows =
-        clickable && this.balanceExpanded && this.balanceState
+        clickable && this.balanceViewIndex > 0 && this.balanceState
           ? S.balanceDetailView(this.balanceState)
           : this.balanceView;
       const hasTier = rows.some((r) => r.role === 'tier');

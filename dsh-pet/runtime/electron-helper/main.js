@@ -45,13 +45,17 @@ try {
   );
   process.exit(3);
 }
-const { app, BrowserWindow, ipcMain, screen, shell, protocol, Tray, Menu, nativeImage } = electronApi;
+const { app, BrowserWindow, ipcMain, screen, shell, protocol, Tray, Menu, nativeImage, powerMonitor } = electronApi;
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const fsPromises = require('node:fs/promises');
 // 点击穿透兜底通道的纯判定（不依赖 Electron 的 forward 鼠标钩子；见文件头注释）
 const { decideWindowIgnore, pointerZone } = require('./pointer-target.js');
+// Linux 专用：X11 指针实时查询（见 x11-pointer.js 文件头）。桌面宠物窗口在穿透状态下收不到
+// 任何鼠标事件，Chromium 的 screen.getCursorScreenPoint() 在 X11 上会因此冻结在旧坐标——
+// 兜底轮询拿着陈旧坐标算，宠物永远翻不成可交互。这里直接问 X server。
+const { createLinuxPointer } = require('./x11-pointer.js');
 // 置顶看门狗：WS_EX_TOPMOST 只是样式位，不等于窗口真的在置顶带（见 topmost-watchdog.js 头部）
 const {
   TOPMOST_WATCHDOG_TICK_MS,
@@ -66,6 +70,20 @@ const { shouldLinearize, resolveForcedScale, resolvePetScale } = require('./dpi-
 // 托盘的平台差异（模板图 / 左键是否自动弹菜单 / Dock）：规则住在模块里，main.js 只接线
 const { trayPlatform } = require('./tray-platform.js');
 const { buildDeskGeometry } = require('./desktop-geometry.js');
+
+/** Linux 指针提供者：仅在 Linux 创建；查询失败时 get() 返回 null（调用方回退 Electron 原生 API） */
+const linuxPointer = process.platform === 'linux' ? createLinuxPointer() : null;
+
+/**
+ * 当前光标位置（DIP）。
+ * Linux：X11 QueryPointer 的实时值（物理像素 ÷ 缩放）；其余平台或查询尚未就绪：Electron 原生 API。
+ */
+function currentPointer() {
+  const raw = linuxPointer && linuxPointer.get();
+  if (!raw) return screen.getCursorScreenPoint();
+  const scale = screen.getPrimaryDisplay().scaleFactor || 1;
+  return scale === 1 ? raw : { x: Math.round(raw.x / scale), y: Math.round(raw.y / scale) };
+}
 
 // 允许无用户手势直接播放（余额动画等）
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -84,6 +102,12 @@ const APP_TOKEN = APP_MODE ? process.env.DSH_PET_APP_TOKEN : undefined;
 // 名字必须与 src/host/storage-paths.ts 的 DESKTOP_APP_NAME 逐字一致
 // （storage-paths.test.ts 会直接读本文件比对，改名不同步测试就红）。
 app.setName('dsh-pet-electron-helper');
+// Windows 任务栏分组（#193 后续）：不设 AppUserModelID 时 Shell 把窗口归到 electron.exe 名下，
+// 任务栏按钮一旦意外出现就显示 Electron 默认图标。设成自己的 ID 后至少归到本应用、图标走窗口 icon。
+// 必须在 ready 之前调用；独立应用与 DSH 内 helper 用不同 ID，避免两边同时运行时被合成一组。
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_MODE ? 'com.dsh.pet.app' : 'com.dsh.pet.helper');
+}
 // 应用模式只改**数据目录**，不改应用名：独立应用与 DSH 内的 helper 若共用同一个 userData，
 // 两个 Chromium 进程会抢同一份 profile（单例锁）互相踢。名字不动也就不会触发上面那个防漂移测试。
 if (APP_MODE) app.setPath('userData', path.join(app.getPath('appData'), 'dsh-pet'));
@@ -140,6 +164,18 @@ if (!DPI_PROBE && HOST_PID > 0) {
 // 不影响浏览器形态与主 DSH（独立进程）；非 Windows（macOS/Linux）合成路径不同，保留硬件加速。
 if (process.platform === 'win32') {
   app.disableHardwareAcceleration();
+  // disableHardwareAcceleration() 只关硬件 GL，**并不会去掉 Chromium 的 GPU 进程**：
+  // 机器上装了虚拟显示器（ToDesk / GameViewer / MuMu / 远程桌面 IDD 之类）时，GPU 进程的
+  // 沙箱在初始化阶段会以 STATUS_BREAKPOINT(0x80000003) 反复崩掉，随后浏览器进程直接
+  //   FATAL:gpu_data_manager_impl_private.cc:416] GPU process isn't usable. Goodbye.
+  // 以 0x80000003(2147483651) 退出 —— helper 每起必崩、桌面宠物永远不出现，宿主侧只能看到
+  // 一行无信息量的 "helper exited (code=2147483651)"，最后被熔断逻辑彻底放弃。
+  // 关掉 GPU 沙箱即可恢复（实测：单独 --disable-gpu / --use-angle=swiftshader 均无效，
+  // --disable-gpu-sandbox 与 --in-process-gpu 有效；这里选前者，对渲染路径改动最小）。
+  // 默认保留 GPU 沙箱；仅在已确认虚拟显示器兼容问题时显式设 DSH_PET_GPU_SANDBOX=0。
+  if (process.env.DSH_PET_GPU_SANDBOX === '0') {
+    app.commandLine.appendSwitch('disable-gpu-sandbox');
+  }
 }
 
 // ---------- 全局 DPI 线性化（多显示器异构缩放的根因修复） ----------
@@ -410,6 +446,22 @@ function petWindowSize(size) {
 }
 
 /**
+ * 把窗口从任务栏摘掉（#193 后续：合盖/唤醒后任务栏冒出 Electron 默认图标）。
+ *
+ * `skipTaskbar: true` 只在建窗时生效一次。Windows 在唤醒、显示器拓扑变化后会让 Shell 重新
+ * 枚举顶层窗口：窗口重新 show 时任务栏按钮会被重建，而这次重建不保证再被摘掉。所以凡是
+ * 「窗口可能重新出现」的时机都要再摘一次。show() 内部重建按钮是异步的——紧跟一个 0ms 的
+ * 第二次调用才算数（只调一次仍会残留按钮）。
+ */
+function keepOffTaskbar(win) {
+  if (!win || win.isDestroyed()) return;
+  win.setSkipTaskbar(true);
+  setTimeout(() => {
+    if (!win.isDestroyed()) win.setSkipTaskbar(true);
+  }, 0);
+}
+
+/**
  * 桌面几何：**逐显示器的工作区列表** + 它们的外接矩形 + 主屏下标。
  *
  * 外接矩形（hull）仍然是渲染端视口 VIEW 的来源——它只用作坐标系原点与比例换算基准。
@@ -443,6 +495,8 @@ function createPetWindows() {
       frame: false,
       alwaysOnTop: true,
       skipTaskbar: true,
+      // 任务栏按钮万一还是冒出来（唤醒后重建），至少显示宠物图标而不是 Electron 默认原子图
+      icon: path.join(__dirname, '..', '..', 'assets', 'logo.png'),
       resizable: false,
       hasShadow: false,
       // 可聚焦：对话输入框/菜单需要窗口焦点才能打字（focusable:false 会让输入框永远无法聚焦）。
@@ -475,7 +529,12 @@ function createPetWindows() {
     // 默认整窗点击穿透（renderer 在光标进/出身体命中区时经 IPC 翻转可交互）；
     // forward:true 保证穿透期间 mousemove 仍转发进渲染端做命中判定。
     setWindowIgnore(win, true);
-    win.once('ready-to-show', () => win.showInactive());
+    // 任务栏按钮可能在 show / ready-to-show / 唤醒 / 显示器变化后重建（见 keepOffTaskbar）
+    win.on('show', () => keepOffTaskbar(win));
+    win.once('ready-to-show', () => {
+      keepOffTaskbar(win);
+      win.showInactive();
+    });
     // [#55 兜底显示] paintWhenInitiallyHidden:false 时渲染器可能不产出首帧，ready-to-show 便永不触发
     // （Electron 文档原文：ready-to-show "will never fire if you use paintWhenInitiallyHidden: false"），
     // 而 show() 只挂在它上面 → 窗口永远隐藏（进程活着、宠物逻辑照跑，桌面上什么都没有）。
@@ -498,7 +557,7 @@ function createPetWindows() {
       if (b.width < 8 || b.height < 8) return; // 尺寸还没落定（renderer 首帧上报前）
       const ignoring = windowIgnore.get(win.id) !== false;
       const busy = inputBusy.get(win.id) === true;
-      const point = screen.getCursorScreenPoint();
+      const point = currentPointer();
       // 余量区停留计时：只在"非 busy 且在余量区"时累加，离开余量区即清零；busy 期间不累加。
       const mg = winMargins.get(win.id);
       const zone = pointerZone(b, point, mg);
@@ -848,7 +907,16 @@ app.whenReady().then(() => {
   // 托盘：不 await（建窗与建托盘互不依赖），内部自己等 bridge 回调服务就绪
   void startTray();
 
+  linuxPointer?.start();
   createPetWindows();
+
+  // 合盖/唤醒是任务栏按钮重建最集中的时刻（#193 后续）：resume / unlock-screen 后把每只宠物
+  // 重新摘一次。powerMonitor 只能在 ready 之后使用，所以挂在这里而不是模块顶层。
+  const reassertTaskbar = () => {
+    for (const win of windows.values()) keepOffTaskbar(win);
+  };
+  powerMonitor.on('resume', reassertTaskbar);
+  powerMonitor.on('unlock-screen', reassertTaskbar);
 
   // 宠物窗口跟随：renderer 逐帧上报窗口内容区位置/尺寸
   ipcMain.on('pet:set-bounds', (event, bounds) => {
@@ -1015,7 +1083,10 @@ app.whenReady().then(() => {
     const geo = deskGeometry();
     lastRequestedBounds.clear(); // 坐标系变了，去重缓存作废，下一帧必须真的重设一次
     for (const win of windows.values()) {
-      if (!win.isDestroyed()) win.webContents.send('pet:displays', geo);
+      if (win.isDestroyed()) continue;
+      // 显示器拓扑变化同样是任务栏按钮重建的时机（#193 后续）
+      keepOffTaskbar(win);
+      win.webContents.send('pet:displays', geo);
     }
     console.error('[dsh-pet-desktop-helper] displays changed: ' + JSON.stringify(geo));
     // 主屏缩放可能一起变了（它决定宠物的尺寸补偿）。线性化生效期间 screen API 只报被强制的值，

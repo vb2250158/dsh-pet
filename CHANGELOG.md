@@ -1,5 +1,11 @@
 # Fork changes
 
+## 0.3.8-fork.3 (2026-10-25)
+
+- Integrate 16 official commits through 4eb75e6: custom balance pages, provider timeouts, configuration serialization, invalid-history recovery, valid Electron caches, display topology and wake fixes, optional click sound and asset attribution. Preserve host fonts, readable bubbles and existing memories. Package the new sound asset in the root installation adapter.
+- Keep the GPU sandbox enabled by default. The Windows virtual-display workaround requires an explicit DSH_PET_GPU_SANDBOX=0; no environment change is made by this release.
+- 合入16项官方更新：多页余额、查询超时、配置串行化、坏历史和Electron缓存保护、显示器/唤醒修复、可选音效与素材署名；保留字体、气泡和记忆。根安装包包含新音效。GPU沙箱默认启用，虚拟显示器兼容选项仅由显式 DSH_PET_GPU_SANDBOX=0 启用，本次发布不改环境变量。
+
 ## 0.3.8-fork.2 (2026-10-24)
 
 - Integrate upstream 0.3.8 modifier-click navigation, string-safe JSONC comments, optional single-process app packaging, Electron download progress, tool-detail work status and the configurable system tray. Retain host fonts, readable bubbles, prior wallet behavior and user configuration and memories. The normal DSH plugin path still launches through its profile; the standalone app is optional.

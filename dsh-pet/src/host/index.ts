@@ -23,7 +23,7 @@
  *   /dsh-pet-7340/reload              → 桌面端「重载配置」（右键菜单，POST）：重启桌面 Helper，全部桌面
  *                                宠物窗口按最新配置重建（改配置文件后不必回设置页点保存）；与保存走
  *                                **同一条**重启路径（syncDesktop），宠物数量/display/size 变化同样生效
- *   /dsh-pet-7340/config/meta         → 配置文件与素材目录路径 + 全部存储位置清单
+ *   /dsh-pet-7340/config/meta         → 配置文件与素材目录路径 + 日志文件 + 全部存储位置清单
  *                                       （设置页「高级配置」「卸载与存储」展示用）
  *   /dsh-pet-7340/models              → 可选「服务商 + 模型」清单（设置页「AI 模型」下拉框数据源；
  *                                       与 DSH 模型选择器同源，取宿主 llm 服务的 listProviders/listModels）
@@ -204,6 +204,7 @@ const MIME: Record<string, string> = {
   '.mov': 'video/quicktime',
   '.mp4': 'video/mp4',
   '.png': 'image/png',
+  '.wav': 'audio/wav',
   '.json': 'application/json; charset=utf-8',
   '.jsonc': 'application/json; charset=utf-8',
   '.ttf': 'font/ttf',
@@ -771,7 +772,7 @@ export function apply(ctx: any): void {
   // 对话写操作串行队列：read-modify-write 排队执行，防两端同时对话时交错写盘
   let chatQueue: Promise<void> = Promise.resolve();
 
-  /** 读记忆文件：不存在 → 空；损坏 → 显式报错 + 备份原始文件（绝不静默丢数据）+ 重建空记忆 */
+  /** 读记忆文件：不存在 → 空；解析失败/根不是对象 → 记日志 + 空记忆（不备份、不改写源文件） */
   const readMemory = async (): Promise<Record<string, Record<string, { messages: ChatMemoryMessage[] }>>> => {
     let raw: string;
     try {
@@ -781,18 +782,12 @@ export function apply(ctx: any): void {
     }
     try {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
-      if (!parsed || typeof parsed !== 'object') throw new Error('not an object');
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
       return parsed as Record<string, Record<string, { messages: ChatMemoryMessage[] }>>;
     } catch (e) {
       log.error(
-        `dsh-pet: 记忆文件损坏已备份（对话将从头开始）：${memoryPath}（${e instanceof Error ? e.message : String(e)}）`,
+        `dsh-pet: 记忆文件无法解析（对话将从头开始）：${memoryPath}（${e instanceof Error ? e.message : String(e)}）`,
       );
-      try {
-        await mkdir(userRoot, { recursive: true });
-        await writeFile(`${memoryPath}.bak-${Date.now()}`, raw, 'utf8');
-      } catch {
-        /* 备份失败仅告警，不阻断 */
-      }
       return {};
     }
   };
@@ -920,8 +915,16 @@ export function apply(ctx: any): void {
           ? limitPool(readMemePool(found.conf.memes, memeDirsFor(found.entry)), Number(found.conf.chatImageLimit))
           : [];
       const mem = await readMemory();
-      const bucket = (mem[found.entry] ??= {});
-      const entry = (bucket[petId] ??= { messages: [] });
+      // 坏结构（数组/标量）按空桶重建；messages 不是数组的条目按新会话处理，避免 push 到坏对象上崩溃
+      const bucket =
+        mem[found.entry] && typeof mem[found.entry] === 'object' && !Array.isArray(mem[found.entry])
+          ? mem[found.entry]
+          : (mem[found.entry] = {});
+      const existing = bucket[petId];
+      if (existing !== undefined && (!existing || !Array.isArray(existing.messages))) {
+        log.error(`[dsh-pet] 记忆结构异常（messages 不是数组）pet=${petId}，按新会话处理：${memoryPath}`);
+      }
+      const entry = existing && Array.isArray(existing.messages) ? existing : (bucket[petId] = { messages: [] });
       // rounds = 0（用户关掉历史）→ 空历史；否则截尾部 rounds 轮（1 轮 = 1 问 1 答）。
       // 不能写 slice(-rounds * 2)：-0 在 JS 里 === 0，slice(-0) 返回整个数组而不是空。
       const list = sliceMemoryRounds(entry.messages, rounds);
@@ -1338,6 +1341,10 @@ export function apply(ctx: any): void {
   /** 用户动画根：按扩展名取子目录（main-animation/webm 或 main-animation/mov）。 */
   const userRootFor = (ext: string): string => join(thumbUserRoot, animSubdirFor(ext));
 
+  // 配置请求覆盖完整读改写：下一次更新必须读取前一次完成后的配置。
+  // GET /config 同样排队，避免写入尚未完成时读到空文件而回退内置默认。
+  let configQueue: Promise<void> = Promise.resolve();
+
   /** 单次业务路由(WebServer 注册 → HTTP 落盘 / 桌面 Helper 管道 → scheme 应答,共用同一份实现):
    *  输入只需 rawUrl(/dsh-pet-7340/... + 查询) + method + body 文本;返回 RouteResult(JSON/文本/文件),
    *  消费方各自落盘——业务逻辑只有一份,两端天然一致(硬契约:浏览器/桌面行为严格对齐)。
@@ -1351,7 +1358,25 @@ export function apply(ctx: any): void {
   ): Promise<RouteResult> => {
     const url = new URL(rawUrl, 'http://localhost');
     const rest = decodeURIComponent(url.pathname.slice(ROUTE_PREFIX.length + 1));
+    const run = (): Promise<RouteResult> => dispatchPetRoute(url, rest, method, body, signal);
+    if (rest === 'config' || (rest === 'pet-display' && method === 'POST')) {
+      const pending = configQueue.then(run, run);
+      configQueue = pending.then(
+        () => undefined,
+        () => undefined,
+      );
+      return pending;
+    }
+    return run();
+  };
 
+  const dispatchPetRoute = async (
+    url: URL,
+    rest: string,
+    method: string,
+    body?: string,
+    signal?: AbortSignal,
+  ): Promise<RouteResult> => {
     // 成品配置：/dsh-pet-7340/config（GET 读取合并成品 / PUT 保存用户层 / POST 同步内置默认）
     if (rest === 'config') {
       if (method === 'GET') {
@@ -1577,6 +1602,9 @@ export function apply(ctx: any): void {
           default: join(PACKAGE_ROOT, 'assets', 'config.jsonc'),
           animations: thumbUserRoot,
           memes: memesUserRoot,
+          // 统一日志出口（就是上面那个 logger 的 file：三种模式都落在 $DSH_HOME/dsh-pet/logs.txt）：
+          // 桌面版没有控制台，用户反馈「宠物不出现 / 闪退」时只能靠这个文件。
+          logs: log.file,
           // 全部落盘位置（本包用户数据 / Electron 运行时 / 桌面端缓存 / 下载缓存 / 插件本体）：
           // 前两条直接传真实写入方的路径，不在这里重拼目录名
           storage: storageEntries({
@@ -2343,8 +2371,13 @@ export function apply(ctx: any): void {
         const petId = who.petId;
         if (method === 'GET') {
           const mem = await readMemory();
-          const bucket = mem[who.entry] ?? {};
-          const list = (bucket[petId]?.messages ?? []).slice();
+          const rawMessages = mem[who.entry]?.[petId]?.messages;
+          // 记忆文件是合法 JSON 但 messages 不是数组时，slice() 会抛 slice is not a function：
+          // 按空历史处理并记一行日志，不因为一条坏数据让整个历史接口报错。
+          const list = Array.isArray(rawMessages) ? rawMessages.filter((m) => m && typeof m.content === 'string') : [];
+          if (rawMessages !== undefined && !Array.isArray(rawMessages)) {
+            log.error(`[dsh-pet] 记忆结构异常（messages 不是数组）pet=${petId}，按空历史处理：${memoryPath}`);
+          }
           // 传了 ?rounds= 就用传的（含 0 = 空历史），没传才回落到配置
           const rounds = roundsOverride ?? memoryRounds(who.conf);
           // 与 chatWithPet 同一语义：rounds = 0 → 空历史（slice(-0) 会返回整个数组，见上）
@@ -2425,6 +2458,16 @@ export function apply(ctx: any): void {
       if (picFile === undefined) return { kind: 'text', status: 404, body: 'dsh-pet: pic not found' };
       const ext = picFile.slice(picFile.lastIndexOf('.')).toLowerCase();
       return { kind: 'file', file: picFile, contentType: MIME[ext] ?? 'application/octet-stream' };
+    }
+
+    // 点击音效：/dsh-pet-7340/sound/<file> → 包内 assets/sound（当前只有 click-duck.wav）。
+    // 与 font 同一种扁平形式（<scope>/<file>）：只有包内一份，不做用户目录覆盖。
+    if (scope === 'sound') {
+      const soundRoot = join(PACKAGE_ROOT, 'assets', 'sound');
+      const soundFile = resolveExisting(soundRoot, restParts.join('/'));
+      if (soundFile === undefined) return { kind: 'text', status: 404, body: 'dsh-pet: sound not found' };
+      const ext = soundFile.slice(soundFile.lastIndexOf('.')).toLowerCase();
+      return { kind: 'file', file: soundFile, contentType: MIME[ext] ?? 'application/octet-stream' };
     }
 
     if (scope !== 'thumb') {

@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet",
-  "version": "0.3.8-fork.2",
+  "version": "0.3.8-fork.3",
   "description": "Display a draggable animated pet with companion chat, speech bubbles and wallet management.",
   "icon": "dsh-pet/assets/logo.png",
   "keywords": [
@@ -53,7 +53,8 @@
     "dsh-pet/assets/logo.png",
     "dsh-pet/scripts/ensure-electron.mjs",
     "dsh-pet/cordis.patch.yml",
-    "locale"
+    "locale",
+    "dsh-pet/assets/sound"
   ],
   "scripts": {
     "build": "npm --prefix dsh-pet run build",
