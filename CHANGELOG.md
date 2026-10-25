@@ -2,6 +2,9 @@
 
 ## 0.3.8-fork.4 (2026-10-25)
 
+- Integrate upstream comment and JSDoc lint changes through dfc0396; preserve every existing executable source token, including the GPU sandbox opt-out and host typography. The desktop shared bundle includes its generator header.
+- 合入上游注释及 JSDoc 检查更新至 dfc0396；逐项保留既有可执行源码，包括 GPU 沙箱显式退出和宿主字体。桌面共享产物附带生成器文件头。
+
 - Pin build-time Valibot to 1.4.2 in both installation manifests; keep the existing bundler and GPU sandbox defaults. The selected DSH runtime owns its peer dependency versions.
 - 两份安装清单均固定构建依赖 Valibot 1.4.2；保留现有构建器及 GPU 沙箱默认值。DSH 宿主依赖由实际运行时提供。
 
