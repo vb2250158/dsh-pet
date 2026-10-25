@@ -1,3 +1,8 @@
+# 0.3.8-fork.5
+
+- Merge upstream comment and lint maintenance while retaining local fonts, bubble readability and the patched Valibot build dependency.
+- Declare eslint-plugin-jsdoc at the root build manifest so fixed Git installations run the same prepack checks as local builds.
+
 # Fork changes
 
 ## 0.3.8-fork.4 (2026-10-25)

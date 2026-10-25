@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet",
-  "version": "0.3.8-fork.4",
+  "version": "0.3.8-fork.5",
   "description": "Display a draggable animated pet with companion chat, speech bubbles and wallet management.",
   "icon": "dsh-pet/assets/logo.png",
   "keywords": [
@@ -119,7 +119,8 @@
     "rolldown": "1.0.0-beta.7",
     "tsdown": "^0.8.0",
     "typescript": "^5.5.0",
-    "typescript-eslint": "^8.67.0"
+    "typescript-eslint": "^8.67.0",
+    "eslint-plugin-jsdoc": "^65.4.2"
   },
   "overrides": {
     "valibot": "1.4.2",

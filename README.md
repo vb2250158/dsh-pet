@@ -4,6 +4,10 @@ This maintenance fork integrates upstream changes while keeping the DSH font as 
 
 本维护版同步上游更新，默认沿用 DSH 字体，并保留深色文字和碎碎念至少 12px 的可读性设置；字体仍可配置。
 
+`0.3.8-fork.5` includes the JSDoc lint dependency in the root Git-install build manifest.
+
+`0.3.8-fork.5` 在根构建清单中补齐 JSDoc lint 依赖，保证固定 Git 安装可执行发布检查。
+
 `0.3.8-fork.4` pins the build-time Valibot dependency to 1.4.2. Installation peers come from the selected DSH runtime. It also incorporates upstream comment/JSDoc lint maintenance through `dfc0396`; the GPU sandbox default and typography remain unchanged.
 
 `0.3.8-fork.4` 将构建依赖 Valibot 固定为 1.4.2；宿主依赖仍由选定的 DSH 运行时提供。此版同时合入上游至 `dfc0396` 的注释和 JSDoc 检查维护，保留 GPU 沙箱默认值及字体设置。
