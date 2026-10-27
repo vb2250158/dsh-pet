@@ -1,3 +1,8 @@
+## 0.3.8-fork.7
+
+- Add an explicit absolute Electron user-data directory override for isolated helper, application and DPI-probe runs; retain existing defaults when unset and reject unusable overrides.
+- 新增显式绝对路径的 Electron 数据目录覆盖，隔离 Helper、应用及 DPI 探测数据；未设置时保留默认目录，非法或不可用路径明确失败。
+
 ## 0.3.8-fork.6
 
 - Integrate upstream modular Host, Client and Electron helper changes, image attachments, menu events and chat history controls.

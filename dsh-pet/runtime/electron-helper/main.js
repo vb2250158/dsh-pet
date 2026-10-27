@@ -73,8 +73,16 @@ app.setName('dsh-pet-electron-helper');
 if (process.platform === 'win32') {
   app.setAppUserModelId(APP_MODE ? 'com.dsh.pet.app' : 'com.dsh.pet.helper');
 }
-// 应用模式只改数据目录、不改应用名：共用同一个 userData 时两个 Chromium 进程会抢同一份 profile 互踢。
-if (APP_MODE) app.setPath('userData', path.join(app.getPath('appData'), 'dsh-pet'));
+// 显式隔离目录优先于应用模式，且必须在 DPI 缓存和 Chromium profile 首次访问之前生效。
+const USER_DATA_DIR = process.env.DSH_PET_USER_DATA_DIR;
+if (USER_DATA_DIR !== undefined) {
+  if (!path.isAbsolute(USER_DATA_DIR)) throw new Error('DSH_PET_USER_DATA_DIR must be an absolute directory');
+  require('node:fs').mkdirSync(USER_DATA_DIR, { recursive: true });
+  app.setPath('userData', USER_DATA_DIR);
+} else if (APP_MODE) {
+  // 应用模式只改数据目录、不改应用名，避免与宿主 Helper 共用 Chromium profile。
+  app.setPath('userData', path.join(app.getPath('appData'), 'dsh-pet'));
+}
 
 /** DPI 探测子进程模式：不建窗口，只把主屏 scaleFactor 打到 stdout 就退出（见 probePrimaryScale） */
 const DPI_PROBE = process.env.DSH_PET_DPI_PROBE === '1';

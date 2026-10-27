@@ -9,7 +9,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 
 /** 桌面端 Electron userData 目录名（= main.js 的 app.setName 入参）。 */
 export const DESKTOP_APP_NAME = 'dsh-pet-electron-helper';
@@ -52,6 +52,10 @@ export interface StoragePathInput {
  */
 function desktopUserDataDir(input: StoragePathInput): string {
   const { home, env = process.env, platform = process.platform } = input;
+  if (env.DSH_PET_USER_DATA_DIR !== undefined) {
+    if (!isAbsolute(env.DSH_PET_USER_DATA_DIR)) throw new Error('DSH_PET_USER_DATA_DIR must be an absolute directory');
+    return env.DSH_PET_USER_DATA_DIR;
+  }
   if (platform === 'win32') return join(env.APPDATA || join(home, 'AppData', 'Roaming'), DESKTOP_APP_NAME);
   if (platform === 'darwin') return join(home, 'Library', 'Application Support', DESKTOP_APP_NAME);
   return join(env.XDG_CONFIG_HOME || join(home, '.config'), DESKTOP_APP_NAME);

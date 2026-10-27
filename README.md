@@ -1,5 +1,9 @@
 # dsh-pet 🐾
 
+`0.3.8-fork.7` adds `DSH_PET_USER_DATA_DIR` for a separate Electron profile. Set an absolute directory before starting the DSH profile; the helper creates it before reading DPI or Chromium data, including DPI-probe and application modes. Empty, relative or unwritable directories fail startup instead of falling back. When unset, existing profile locations remain unchanged.
+
+`0.3.8-fork.7` 新增 `DSH_PET_USER_DATA_DIR`，可在启动 DSH profile 前指定独立的 Electron 数据目录。该值必须为绝对路径；Helper 在读取 DPI 或 Chromium 数据前创建并选用它，DPI 探测及应用模式同样生效。空值、相对路径或不可写目录会使启动失败，不会回落到原目录；未设置时保留已有路径。
+
 `0.3.8-fork.6` integrates upstream through `b78e3fc`: modular Host/Client/desktop code, image attachments, menu events, configuration response handling and chat history deletion. The root Git package, system typography, wallet filtering and default GPU sandbox remain.
 
 `0.3.8-fork.6` 合入上游至 `b78e3fc`：拆分宿主、客户端与桌面代码，新增图片附件、菜单事件、统一配置响应和聊天历史删除；保留根 Git 包、系统字体、钱包过滤及默认 GPU 沙箱。
