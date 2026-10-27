@@ -1,6 +1,6 @@
 # dsh-pet 🐾
 
-0.3.8-fork.6 merges the upstream runtime, image-chat and menu refactors while preserving system-font typography, transparent rendering and the explicit Windows GPU sandbox option. GPU policy tests cover the split helper modules; no user data migration is required.
+0.3.8-fork.6 merges the upstream runtime, image-chat and menu refactors while preserving system-font typography, transparent rendering and the explicit Windows GPU sandbox option. Session-image requests require the Host's browser/API authentication and Host/Origin checks. GPU policy tests cover the split helper modules; no user data migration is required.
 
 This maintenance fork integrates upstream changes while keeping the DSH font as the default, high-contrast bubbles and a 12px minimum for whispers. Font settings remain configurable.
 

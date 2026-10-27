@@ -82,6 +82,18 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
           const onClose = (): void => abort.abort();
           res.on('close', onClose);
           try {
+            const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+            if (decodeURIComponent(pathname) === `${ROUTE_PATH}/attachment`) {
+              // Session images require the Host's browser/API credential, including its Host/Origin fence.
+              // Standalone mode has no Connection admission or Session attachment service.
+              const rejection =
+                typeof ctx.connection.requestRejection === 'function' ? ctx.connection.requestRejection(req) : 401;
+              if (rejection !== undefined) {
+                res.off('close', onClose);
+                sendText(res, rejection, rejection === 401 ? 'unauthorized' : 'forbidden');
+                return;
+              }
+            }
             const body = req.method === 'PUT' || req.method === 'POST' ? await readBody(req) : undefined;
             const result = await handlePetRoute(req.url ?? '/', req.method ?? 'GET', body, abort.signal);
             res.off('close', onClose);
