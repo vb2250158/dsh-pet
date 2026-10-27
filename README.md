@@ -1,6 +1,16 @@
 # dsh-pet 🐾
 
-0.3.8-fork.6 merges the upstream runtime, image-chat and menu refactors while preserving system-font typography, transparent rendering and the explicit Windows GPU sandbox option. Session-image requests require the Host's browser/API authentication and Host/Origin checks. GPU policy tests cover the split helper modules; no user data migration is required.
+`0.3.8-fork.8` requires Host browser/API authentication and Host/Origin admission for Session-image reads, and retains the explicit isolated Electron profile from fork.7.
+
+`0.3.8-fork.8` 为会话图片读取增加宿主浏览器/API 认证和 Host/Origin 检查，并保留 fork.7 的显式 Electron 隔离目录。
+
+`0.3.8-fork.7` adds `DSH_PET_USER_DATA_DIR` for a separate Electron profile. Set an absolute directory before starting the DSH profile; the helper creates it before reading DPI or Chromium data, including DPI-probe and application modes. Empty, relative or unwritable directories fail startup instead of falling back. When unset, existing profile locations remain unchanged.
+
+`0.3.8-fork.7` 新增 `DSH_PET_USER_DATA_DIR`，可在启动 DSH profile 前指定独立的 Electron 数据目录。该值必须为绝对路径；Helper 在读取 DPI 或 Chromium 数据前创建并选用它，DPI 探测及应用模式同样生效。空值、相对路径或不可写目录会使启动失败，不会回落到原目录；未设置时保留已有路径。
+
+`0.3.8-fork.6` integrates upstream through `b78e3fc`: modular Host/Client/desktop code, image attachments, menu events, configuration response handling and chat history deletion. The root Git package, system typography, wallet filtering and default GPU sandbox remain.
+
+`0.3.8-fork.6` 合入上游至 `b78e3fc`：拆分宿主、客户端与桌面代码，新增图片附件、菜单事件、统一配置响应和聊天历史删除；保留根 Git 包、系统字体、钱包过滤及默认 GPU 沙箱。
 
 This maintenance fork integrates upstream changes while keeping the DSH font as the default, high-contrast bubbles and a 12px minimum for whispers. Font settings remain configurable.
 
@@ -118,6 +128,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet/dsh-pet
    ```
 
    这一步在**后台**进行，浏览器里的宠物照常可用；要等多久取决于网速（几十秒到几分钟），期间不用管它。
+
 3. **桌面端随后出现。** 解压完自动拉起桌面 Helper，同一只宠物以透明窗形式落到桌面上——**此时屏幕上一共两只**：浏览器里一只、桌面上那只，共用同一份配置与同一套动画。
 4. **想只留一只。** 两条路都行，改完即时生效：
    - **设置页**：选中该宠物 →「显示位置」下拉框 → 仅浏览器 / 仅桌面 / 两者都显示 / 都不显示；

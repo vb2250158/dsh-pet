@@ -2,7 +2,8 @@
 // 自身不发起请求；工厂形态与 pet.ts 一致（react 由 DSH 运行时注入）。
 // 内容（文案/档位/数学）来自 src/shared/balance.ts 的 balanceBubbleView ——
 // 与桌面模式共用同一份行数据，本文件只负责把行数据映射成 React 节点。
-import { PET_TEXT_CSS } from '../shared/typography';
+import { PET_TEXT_CSS } from '../shared/typography.ts';
+import { ROUTE_PATH } from '../shared/constants.ts';
 import {
   balanceBubbleView,
   balanceDetailView,
@@ -22,7 +23,6 @@ import {
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type * as ReactNS from 'react';
 import type { jsx } from 'react/jsx-runtime';
-import { ROUTE_PATH } from '../shared/constants.ts';
 
 /** 气泡内联样式：白色半透明圆泡加底部小尾巴，盒子尺寸锚字号 `--f`，位置锚宠物尺寸。
  *  width:max-content 不可省：left:50% 的绝对定位盒可用宽度只有包含块一半，shrink-to-fit

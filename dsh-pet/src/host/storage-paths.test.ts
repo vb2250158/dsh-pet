@@ -48,6 +48,18 @@ describe('storageEntries —— 写入方路径原样透传（不自己拼目录
 });
 
 describe('storageEntries —— 逐平台路径推导', () => {
+  test('显式 Helper 数据目录与主进程一致，不回落到共享 profile', () => {
+    const directory = join(tmpdir(), 'isolated-pet-profile');
+    const entries = storageEntries({ ...base, env: { DSH_PET_USER_DATA_DIR: directory } });
+    assert.equal(pathOf(entries, 'desktopCache'), directory);
+    for (const value of ['', 'relative-profile']) {
+      assert.throws(
+        () => storageEntries({ ...base, env: { DSH_PET_USER_DATA_DIR: value } }),
+        /must be an absolute directory/,
+      );
+    }
+  });
+
   test('win32：系统级目录走 APPDATA/LOCALAPPDATA', () => {
     const entries = storageEntries({
       ...base,
