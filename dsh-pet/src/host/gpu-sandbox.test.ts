@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Script } from 'node:vm';
 import { test } from 'node:test';
@@ -37,17 +38,40 @@ function switchesFor(platform: string, gpuSandbox?: string): string[] {
     stderr: new EventEmitter(),
     stdin: new EventEmitter(),
   };
-  const requireStub = (name: string) => {
-    if (name === 'electron') return { app };
-    if (name === 'node:child_process') {
-      return {
-        execFileSync: () => {
-          throw new Error('Unexpected subprocess');
-        },
-      };
-    }
-    return realRequire(name);
-  };
+  const loaded = new Map<string, { exports: Record<string, object> }>();
+  const requireFrom =
+    (filename: string) =>
+    (name: string): object => {
+      if (name === 'electron') return { app };
+      if (name === 'node:child_process') {
+        return {
+          execFileSync: () => {
+            throw new Error('Unexpected subprocess');
+          },
+        };
+      }
+      if (name.startsWith('.')) {
+        const resolved = createRequire(filename).resolve(name);
+        const cached = loaded.get(resolved);
+        if (cached) return cached.exports;
+        const module = { exports: {} };
+        loaded.set(resolved, module);
+        new Script(readFileSync(resolved, 'utf8'), { filename: resolved }).runInNewContext({
+          require: requireFrom(resolved),
+          process: processStub,
+          module,
+          exports: module.exports,
+          __dirname: dirname(resolved),
+          __filename: resolved,
+          URL,
+          Buffer,
+          console: { error: () => {} },
+        });
+        return module.exports;
+      }
+      return realRequire(name);
+    };
+  const requireStub = requireFrom(fileURLToPath(entry));
   assert.throws(
     () =>
       new Script(source, { filename: fileURLToPath(entry) }).runInNewContext({
@@ -55,6 +79,7 @@ function switchesFor(platform: string, gpuSandbox?: string): string[] {
         process: processStub,
         URL,
         __dirname: fileURLToPath(new URL('../../runtime/electron-helper/', import.meta.url)),
+        __filename: fileURLToPath(entry),
         console: { error: () => {} },
       }),
     (error) => error === ready,

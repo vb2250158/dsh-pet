@@ -92,9 +92,22 @@ describe('flattenConfigPets —— 成品 → 渲染列表的唯一填充点', (
   });
 
   test('源码守卫：客户端只有这一处填充，host 的写接口返回成品聚合', () => {
-    const clientPet = readSource('../client/pet.ts');
-    const clientSettings = readSource('../client/settings.ts');
-    const host = readSource('../host/index.ts');
+    // 容器（拍平与渲染列表）在 pet/multi.ts，卡片在 pet.ts：两处一起读，守卫才不会被拆分绕过。
+    const clientPet = readSource('../client/pet.ts') + '\n' + readSource('../client/pet/multi.ts');
+    const clientSettings = readSource('../client/settings.ts') + '\n' + readSource('../client/settings/config/http.ts');
+    // 写入分居 config/ 下的四个文件（分发 / 保存 / 单宠显示位置 / 整条目）：路径搬迁不该让守卫失效，故按文件全读进来。
+    const host =
+      readSource('../host/index.ts') +
+      '\n' +
+      readSource('../host/routes/config/index.ts') +
+      '\n' +
+      readSource('../host/routes/config/save.ts') +
+      '\n' +
+      readSource('../host/routes/config/display.ts') +
+      '\n' +
+      readSource('../host/routes/config/entry.ts') +
+      '\n' +
+      readSource('../host/routes/state.ts');
 
     // ① 旧的手抄填充（mc.<字段> 映射）、以及"设置页回推列表"这条旁路，都不得复活
     assert.ok(
@@ -109,13 +122,15 @@ describe('flattenConfigPets —— 成品 → 渲染列表的唯一填充点', (
     }
     // ② 容器必须经 flattenConfigPets 拿条目级字段
     assert.ok(/flattenConfigPets/.test(clientPet), '容器必须用 flattenConfigPets 拍平成品聚合');
-    // ③ host 的 GET / PUT / POST /config 与 POST /pet-display 都返回成品聚合——调用方拿写接口的
-    //    响应直接拍平，不自己拼字段，也不再补一次 GET（补拉的那一次可能拿到陈旧配置）
-    const returns = host.match(/obj: readAllConfig\(configPaths\)/g) ?? [];
-    assert.equal(returns.length, 4, 'GET / PUT / POST /config 与 POST /pet-display 都应返回成品聚合');
+    // ③ host 的 GET / PUT / POST /config、POST /pet-display 与 POST /pet-config 都返回成品聚合——
+    //    调用方拿写接口的响应直接拍平，不自己拼字段，也不再补一次 GET（补拉的那一次可能拿到陈旧配置）。
+    //    这条只能读源码：源码形态下包内默认配置不可达，写路径的成功态构造不出来
+    //    （见 standalone/integration.test.ts 的「配置不可达」口径），属于登记在案的文本基线。
+    const returns = host.match(/okResult\(readAllConfig\((?:deps\.)?configPaths\)/g) ?? [];
+    assert.equal(returns.length, 5, 'GET / PUT / POST /config、POST /pet-display 与 POST /pet-config 都应返回成品聚合');
     // 只扫 /config 那一段：动作端点（POST /balance 等）返回 { ok: true } 是对的（动作不带数据，
     // 数据只有 /state 一个出口），全文件扫描会把它们误判成"config 写接口返回了 ok:true"。
-    const configBlock = /if \(rest === 'config'\) \{([\s\S]*?)\n {4}\}/.exec(host)?.[1] ?? '';
+    const configBlock = /if \(input\.rest === 'config'\) \{([\s\S]*?)\n {2}\}/.exec(host)?.[1] ?? '';
     assert.ok(configBlock.length > 0, '必须能定位到 /config 路由段（守卫失效即无意义）');
     assert.ok(
       !/obj: \{ ok: true \}/.test(configBlock),
@@ -166,14 +181,14 @@ describe('flattenConfigPets —— 成品 → 渲染列表的唯一填充点', (
     //    透传时，前端就算把输入框画出来、改了值，写盘时也会被丢弃）。守卫两侧：
     //    「保存」请求体必须带 physics；宿主必须用同一份 physicsValid 整段校验它。
     //    取请求体字面量再找键（不写死 `physics: physics`：打包器会把同名简写压成 `physics,`）。
-    const saveBody = /const body: Record<string, unknown> = \{([\s\S]*?)\n {8}\};/.exec(clientSettings);
+    const saveBody = /export function buildSaveBody[\s\S]*?return \{([\s\S]*?)\n {2}\};/.exec(clientSettings);
     assert.ok(saveBody, '设置页必须有「保存」的请求体字面量');
     assert.ok(
       /(^|[^.\w])physics\b/.test(saveBody[1]),
       '「保存」的请求体必须带上 physics（否则设置页改的物理参数不会落盘）',
     );
     assert.ok(
-      /physicsValid\(ph\)/.test(readSource('../host/config.ts')),
+      /physicsValid\(ph\)/.test(readSource('../host/config/save.ts')),
       'saveUserConfig 必须用 physicsValid 校验 physics（与读取侧同一套规则）',
     );
     // ⑨ 模型选择（设置页「AI 模型」两个下拉框）必须真的提交：whisperModel / chatModel 若不在白名单里，
@@ -183,7 +198,7 @@ describe('flattenConfigPets —— 成品 → 渲染列表的唯一填充点', (
       /(^|[^.\w])whisperModel\b/.test(saveBody[1]) && /(^|[^.\w])chatModel\b/.test(saveBody[1]),
       '「保存」的请求体必须带上 whisperModel / chatModel（否则设置页选的模型不会落盘）',
     );
-    const hostConfig = readSource('../host/config.ts');
+    const hostConfig = readSource('../host/config/save.ts');
     assert.ok(
       /modelSelectionValid\(wm\)/.test(hostConfig) && /modelSelectionValid\(cm\)/.test(hostConfig),
       'saveUserConfig 必须用 modelSelectionValid 校验 whisperModel / chatModel（与读取侧同一套规则）',

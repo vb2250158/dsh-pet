@@ -1,3 +1,9 @@
+## 0.3.8-fork.6
+
+- Integrate upstream modular Host, Client and Electron helper changes, image attachments, menu events and chat history controls.
+- Preserve the Windows GPU sandbox default, system typography, readable wallet bubbles, package wrapper and portable build overrides.
+- Update the settings browser fixtures for entity-based validation errors, both Save controls, file-pet asset roots and relative model-picker scrolling.
+
 # 0.3.8-fork.5
 
 - Merge upstream comment and lint maintenance while retaining local fonts, bubble readability and the patched Valibot build dependency.
@@ -44,7 +50,6 @@
 ## 0.3.7-fork.5 (2026-10-20)
 
 - Merge upstream notification targeting, stale-lock rejection, playback progress, wallet selection and opt-in standalone chat configuration. Preserve fork typography, readable bubbles and existing pet memories.
-
 
 ## 0.3.7-fork.4 (2026-10-20)
 

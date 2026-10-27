@@ -16,7 +16,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -224,7 +224,8 @@ describe('decideBalanceNotice —— 弹不弹文字说明（两端共用同一�
 
 describe('源码守卫 —— 不可用状态不得再被静默丢掉', () => {
   test('浏览器 overlay：渲染处不许再要求 balance.ok，且由 noticeTick 驱动气泡、判定来自 shared', () => {
-    const clientPet = readSource('../client/pet.ts');
+    // 渲染入口与指令处理分处两个文件：气泡在 pet.ts，按 tick 弹的判定在 card/cue-effects.ts。
+    const clientPet = readSource('../client/pet.ts') + '\n' + readSource('../client/pet/card/cue-effects.ts');
     assert.ok(
       !/balance\.ok\s*&&\s*cfg\.balanceEnabled/.test(clientPet),
       '余额气泡不得再要求 balance.ok：那是「未登记服务商完全没反应」的根因，文字说明走同一个气泡',
@@ -235,7 +236,13 @@ describe('源码守卫 —— 不可用状态不得再被静默丢掉', () => {
 
   test('桌面外壳：同一条判定 + 不可用也走气泡渲染（不再只写 console）', () => {
     const events = readSource('../../runtime/electron-helper/events.js');
-    const sprite = readSource('../../runtime/electron-helper/sprite.js');
+    // 宠物本体已按职责拆成 sprite.js 与 sprite-*.js：守卫要读全份，否则文件一搬就误报
+    const sprite = [
+      readSource('../../runtime/electron-helper/sprite.js'),
+      ...readdirSync(fileURLToPath(new URL('../../runtime/electron-helper/sprite/', import.meta.url))).map((name) =>
+        readSource('../../runtime/electron-helper/sprite/' + name),
+      ),
+    ].join('\n');
     assert.ok(
       /S\.decideBalanceNotice/.test(events),
       '桌面轮询必须调用同一份判定（shared-core 的 S.decideBalanceNotice）',

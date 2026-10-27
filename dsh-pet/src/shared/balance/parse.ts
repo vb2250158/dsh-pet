@@ -7,7 +7,7 @@
  * @module dsh-pet/src/shared/balance/parse
  */
 
-import type { BalanceState, CustomNode, CustomTag, MoneyWalletView, RawBalanceResult } from './types';
+import type { BalanceState, CustomNode, CustomTag, MoneyWalletView, RawBalanceResult } from './types.ts';
 
 // 自定义气泡节点树的白名单：第三方交来的树是外部输入，解析层负责裁进「一个气泡能画出来」的
 // 范围，渲染器只画不再校验。

@@ -14,6 +14,7 @@ const pet = {
   name: 'Blue',
   size: 240,
   display: 'web',
+  assetRoot: 'main',
   position: { corner: 'top-right', marginX: 20, marginY: 20 },
 };
 const defaults = {
@@ -154,7 +155,7 @@ test('config save errors: write failures keep edits visible and allow a retry', 
 
 test('config save errors: validation failures explain the rejected configuration', async (t) => {
   const { page } = await open(t, {
-    put: (route) => route.fulfill({ status: 400, json: { error: 'invalid pet config' } }),
+    put: (route) => route.fulfill({ json: { ok: false, reason: 'bad-request', message: 'invalid pet config' } }),
   });
   await save(page);
   await page
@@ -200,7 +201,9 @@ test('pending config prevents editing and saving placeholder defaults', async (t
     },
   });
   try {
-    assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).isDisabled(), true);
+    for (const button of await page.getByRole('button', { name: 'Save', exact: true }).all()) {
+      assert.equal(await button.isDisabled(), true);
+    }
     assert.equal(await page.locator('input[type=text]').first().isDisabled(), true);
     assert.deepEqual(writes, []);
   } finally {
@@ -222,7 +225,9 @@ for (const failure of ['http', 'network', 'malformed', 'null']) {
               ),
     });
     await page.getByRole('alert').waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).isDisabled(), true);
+    for (const button of await page.getByRole('button', { name: 'Save', exact: true }).all()) {
+      assert.equal(await button.isDisabled(), true);
+    }
     assert.deepEqual(writes, []);
     fail = false;
     await page.getByRole('button', { name: 'Retry', exact: true }).click();
@@ -278,7 +283,8 @@ test('model picker remains anchored while the responsive settings panel is scrol
   await trigger.click();
   const panel = page.getByRole('menu');
   await panel.waitFor();
-  for (const scrollY of [0, 120]) {
+  const initialScrollY = await page.evaluate(() => globalThis.scrollY);
+  for (const scrollY of [initialScrollY, initialScrollY + 120]) {
     await page.evaluate((y) => window.scrollTo(0, y), scrollY);
     await page.waitForFunction(() => {
       const trigger = document.querySelector('.dsh-pet-mp__trigger').getBoundingClientRect();

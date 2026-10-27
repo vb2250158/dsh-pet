@@ -1,5 +1,9 @@
 # dsh-pet 🐾
 
+`0.3.8-fork.6` integrates upstream through `b78e3fc`: modular Host/Client/desktop code, image attachments, menu events, configuration response handling and chat history deletion. The root Git package, system typography, wallet filtering and default GPU sandbox remain.
+
+`0.3.8-fork.6` 合入上游至 `b78e3fc`：拆分宿主、客户端与桌面代码，新增图片附件、菜单事件、统一配置响应和聊天历史删除；保留根 Git 包、系统字体、钱包过滤及默认 GPU 沙箱。
+
 This maintenance fork integrates upstream changes while keeping the DSH font as the default, high-contrast bubbles and a 12px minimum for whispers. Font settings remain configurable.
 
 本维护版同步上游更新，默认沿用 DSH 字体，并保留深色文字和碎碎念至少 12px 的可读性设置；字体仍可配置。
@@ -116,6 +120,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet/dsh-pet
    ```
 
    这一步在**后台**进行，浏览器里的宠物照常可用；要等多久取决于网速（几十秒到几分钟），期间不用管它。
+
 3. **桌面端随后出现。** 解压完自动拉起桌面 Helper，同一只宠物以透明窗形式落到桌面上——**此时屏幕上一共两只**：浏览器里一只、桌面上那只，共用同一份配置与同一套动画。
 4. **想只留一只。** 两条路都行，改完即时生效：
    - **设置页**：选中该宠物 →「显示位置」下拉框 → 仅浏览器 / 仅桌面 / 两者都显示 / 都不显示；
@@ -136,7 +141,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet/dsh-pet
 - **朝向与落地**：全部动画可镜像（可朝左 / 朝右）；脚底线统一，宠物始终站在地面上
 - **流畅切换**：双缓冲交叉淡入，切换无空白帧
 - **余额展示**：按已用百分比分档播余额动画 + 头顶联想气泡（10 秒自动消失）；DeepSeek 显示账户余额，OpenCode Zen Go 与 Command Code 显示最紧迫的一个额度窗口；**未登记余额接口的服务商改为弹文字说明**（不静默）；按宠物独立开关
-- **碎碎念与对话**：碎碎念按周期自动生成一句（说话动画 + 气泡，也可手动触发）；对话在右键弹输入框与宠物聊天，记忆持久化（浏览器 / 桌面共享同一份）
+- **碎碎念与对话**：碎碎念按周期自动生成一句（说话动画 + 气泡，也可手动触发）；对话在右键弹输入框与宠物聊天，还能附一张图（上传 / 拖拽 / 粘贴 / 截屏），记忆持久化（浏览器 / 桌面共享同一份）
 - **工作状态联动**：监听 DSH 会话事件，切「思考 / 工作 / 整理 / 等待 / 成功 / 出错」档位动画 + 常驻气泡；目标多轮任务只在真正收尾轮庆祝
 - **系统通知**：窗口失焦时弹系统 toast（对话完成 / 生成失败 / 输出截断 / 权限申请 / 用户选择）
 - **桌面模式（可选）**：每只宠物开一个独立透明置顶局部小窗，与浏览器严格同行为、共用同一份素材与纯逻辑（见下节）
@@ -157,6 +162,7 @@ dsh plugin --profile web add file:D:/path/to/dsh-pet/dsh-pet
 
 - [`API.md`](API.md) —— HTTP 接口一览（每个接口一句话，功能预览）
 - [`openapi.yaml`](openapi.yaml) —— 完整契约（OpenAPI 3.1，可直接导入 Swagger UI / Postman）
+- [`CORDIS-API.md`](CORDIS-API.md) —— Cordis 服务一览（每个成员一句话，功能预览）
 - [`CORDIS.md`](CORDIS.md) —— 对外 Cordis 服务（客户端半侧，页面内 `ctx.get('petApi7340')`，不走网络）
 - [`tools/api-tester.html`](tools/api-tester.html) —— HTTP 侧示例：桌宠控制台，扮演第三方消费方，可直观试用（`node tools/api-tester.cjs` 启动）
 - [`tools/cordis-probe`](tools/cordis-probe/README.md) —— Cordis 侧示例：扮演同页客户端插件，用 `ctx.get()` 消费服务
@@ -214,6 +220,9 @@ npm run build && npm run standalone   # 仓库里（先构建）
 - **碎碎念**：`pets[i].whisperEnabled` 开启后，按 `eventsRefreshSec.whisper`（秒，默认 300）周期自动生成一句——每只宠物独立周期、独立文案；触发时随机抽 `events.whisper` 动画 + 头顶说话气泡（10 秒消失）。默认开启
 - **手动触发**：右键菜单「碎碎念」随时来一句——不受 `whisperEnabled` 门控（该字段只关自动周期轮询）
 - **对话**：右键菜单「对话」或 `/chat` 命令打开输入框，与宠物聊天——回复走碎碎念同款展示（说话动画 + 气泡）；记忆持久化在 `$DSH_HOME/dsh-pet/memory.json`，浏览器与桌面共享同一份；多宠物时先用 `/pet` 选择对话目标
+- **带图对话**：输入框下方两枚按钮——上传图片、截取当前屏幕；也可以把图**拖到宠物身上**，或直接 `Ctrl+V` 粘贴截图。图片只跟随这一轮请求，**不进记忆、不进气泡**；原图 ≤640 KiB 且长边 ≤2048 时原样发送，超限会缩到长边 2048 并按质量阶梯压成 JPEG（对应 `POST /chat` 的可选 `attachment`，见 [API.md](API.md)）
+- **打开对话的快捷键**：鼠标停在某只宠物上按 `T`（右键菜单「对话」右侧有同样的提示）。桌面端要求窗口已聚焦——透明窗用 `showInactive` 显示、默认不抢焦点，先点一下宠物即可
+- **截屏的边界**：只在点击/粘贴/拖拽那一瞬抓一帧，随即停流；桌面端取「宠物所在那块屏」，不建长连接、不落盘。图片与用户在 DSH 里贴图走同一个附件存储（内容寻址、同图去重）
 
 ## ⚙️ 工作状态联动（Work Status）
 

@@ -2,10 +2,10 @@
  * 字体：字体种类 id → CSS 字体栈的唯一映射，以及字号换算。
  * 设置页选项由 FONT_PRESETS 生成，渲染层一律经 fontStackOf / resolveFontPx 取值，不再各写字面量。
  * 配置里只存 id 不存字体栈：字体栈手改写错会拼坏样式，id 有白名单可校验。
- * 宿主半侧不能用本模块（DSH 单文件加载约束），其 fontValid 是自包含副本，改清单须两边同步。
+ * 宿主半侧也经本模块取清单：字体种类只此一份，改清单两端同时生效。
  * @module dsh-pet/src/shared/fonts
  */
-import type { FontConfig, FontFamilyId } from './types';
+import type { FontConfig, FontFamilyId } from './types.ts';
 
 /** 一个字体预设：写进配置的 id 与两端共用的 CSS 字体栈。 */
 export interface FontPreset {
