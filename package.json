@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet",
-  "version": "0.3.8-fork.5",
+  "version": "0.3.8-fork.6",
   "description": "Display a draggable animated pet with companion chat, speech bubbles and wallet management.",
   "icon": "dsh-pet/assets/logo.png",
   "keywords": [
@@ -83,7 +83,8 @@
         "0.1.7-rc.2": "incompatible",
         "0.2.0-rc.1": "compatible",
         "0.2.0-rc.2": "compatible",
-        "0.2.1-rc.2": "compatible"
+        "0.2.1-rc.2": "compatible",
+        "0.2.1-rc.3": "compatible"
       }
     },
     "client": {
@@ -95,15 +96,15 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4 || 4.0.5-alpha.1 || 4.0.5-alpha.2",
-    "@deepseek-ai/dsh-agent-default-model": "^0.2.0-rc.1 || 0.2.1-rc.2",
-    "@deepseek-ai/dsh-client-connection": "^0.2.0-rc.1 || 0.2.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-primitives": "^0.2.0-rc.1 || 0.2.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.2.0-rc.1 || 0.2.1-rc.2",
-    "@deepseek-ai/dsh-commands": "^0.2.0-rc.1 || 0.2.1-rc.2",
-    "@deepseek-ai/dsh-credentials": "^0.2.0-rc.1 || 0.2.1-rc.2",
-    "@deepseek-ai/dsh-home-paths": "^0.2.0-rc.1 || 0.2.1-rc.2",
-    "@deepseek-ai/dsh-host-webserver": "^0.2.0-rc.1 || 0.2.1-rc.2",
-    "@deepseek-ai/dsh-llm": "^0.2.0-rc.1 || 0.2.1-rc.2",
+    "@deepseek-ai/dsh-agent-default-model": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-connection": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
+    "@deepseek-ai/dsh-commands": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
+    "@deepseek-ai/dsh-credentials": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
+    "@deepseek-ai/dsh-home-paths": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
+    "@deepseek-ai/dsh-host-webserver": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
+    "@deepseek-ai/dsh-llm": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

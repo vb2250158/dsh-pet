@@ -11,17 +11,18 @@ import {
   type BalanceBubbleRow,
   type BalanceState,
   type CustomNode,
-} from '../shared/balance';
+} from '../shared/balance/index.ts';
 import {
   MEME_BUBBLE_CLASS,
   MEME_IMG_CLASS,
   injectMemeBubbleCss,
   memeImageUrl,
   whisperBubbleView,
-} from '../shared/whisper';
+} from '../shared/whisper.ts';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type * as ReactNS from 'react';
 import type { jsx } from 'react/jsx-runtime';
+import { ROUTE_PATH } from '../shared/constants.ts';
 
 /** 气泡内联样式：白色半透明圆泡加底部小尾巴，盒子尺寸锚字号 `--f`，位置锚宠物尺寸。
  *  width:max-content 不可省：left:50% 的绝对定位盒可用宽度只有包含块一半，shrink-to-fit
@@ -223,13 +224,14 @@ export function makeBalanceBubble(rt: {
     const clickable = state.ok && (state.shape === 'windows' || (isCustom && customClickable(state)));
     // 不可用状态是多行说明，套用碎碎念的窄字号变体。
     const wrap = state.ok ? '' : ' dsh-pet-whisper';
+    // 展开态只属于内置 windows 的收起/展开两页；custom 各页是对等页面，翻页不该切紧凑字号。
     return h('div', {
       className:
         'dsh-pet-bubble' +
         wrap +
         (on ? ' is-on' : '') +
         (clickable ? ' is-clickable' : '') +
-        (shown > 0 ? ' is-expanded' : '') +
+        (!isCustom && shown > 0 ? ' is-expanded' : '') +
         (fading ? ' is-fading' : ''),
       // 就地吞掉，避免触发宠物本体的点击与拖拽。
       onClick: clickable
@@ -271,7 +273,7 @@ export function makeWhisperBubble(rt: {
     const key = String(image ?? '').trim();
     const href = String(url ?? '').trim();
     // 配图二选一：url 直接用，image 按素材根拼路径；判别位在字段名上，不靠 startsWith 嗅探。
-    const src = href || (key ? memeImageUrl(key, '/dsh-pet-7340', assetRoot) : '');
+    const src = href || (key ? memeImageUrl(key, ROUTE_PATH, assetRoot) : '');
     return h('div', {
       className: 'dsh-pet-bubble dsh-pet-whisper' + (src ? ' ' + MEME_BUBBLE_CLASS : '') + (on ? ' is-on' : ''),
       children: src

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Script } from 'node:vm';
 import { test } from 'node:test';
@@ -37,7 +38,26 @@ function switchesFor(platform: string, gpuSandbox?: string): string[] {
     stderr: new EventEmitter(),
     stdin: new EventEmitter(),
   };
-  const requireStub = (name: string) => {
+  const modules = new Map<string, { exports: Record<string, unknown> }>();
+  const loadModule = (file: string): Record<string, unknown> => {
+    const cached = modules.get(file);
+    if (cached) return cached.exports;
+    const module = { exports: {} };
+    modules.set(file, module);
+    new Script(readFileSync(file, 'utf8'), { filename: file }).runInNewContext({
+      require: (name: string) => requireStub(name, file),
+      module,
+      exports: module.exports,
+      process: processStub,
+      __dirname: dirname(file),
+      __filename: file,
+      URL,
+      Buffer,
+      console: { error: () => {} },
+    });
+    return module.exports;
+  };
+  const requireStub = (name: string, parent = fileURLToPath(entry)): unknown => {
     if (name === 'electron') return { app };
     if (name === 'node:child_process') {
       return {
@@ -46,6 +66,7 @@ function switchesFor(platform: string, gpuSandbox?: string): string[] {
         },
       };
     }
+    if (name.startsWith('.')) return loadModule(createRequire(parent).resolve(name));
     return realRequire(name);
   };
   assert.throws(
@@ -54,6 +75,8 @@ function switchesFor(platform: string, gpuSandbox?: string): string[] {
         require: requireStub,
         process: processStub,
         URL,
+        Buffer,
+        __filename: fileURLToPath(entry),
         __dirname: fileURLToPath(new URL('../../runtime/electron-helper/', import.meta.url)),
         console: { error: () => {} },
       }),

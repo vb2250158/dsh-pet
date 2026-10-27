@@ -6,7 +6,7 @@
  * 必须始终：任何一项失败都以非零退出码结束，坏文档不能进发布链。
  * @module dsh-pet/scripts/check-openapi
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +16,7 @@ const yaml = require('js-yaml');
 
 const HERE = dirname(fileURLToPath(import.meta.url)); // dsh-pet/scripts
 const SPEC_PATH = join(HERE, '..', '..', 'openapi.yaml'); // 仓库根
-const HOST_SRC = join(HERE, '..', 'src', 'host', 'index.ts');
+const ROUTES_DIR = join(HERE, '..', 'src', 'host', 'routes');
 
 const doc = yaml.load(readFileSync(SPEC_PATH, 'utf8'));
 const fail = [];
@@ -83,11 +83,25 @@ for (const [p, item] of Object.entries(doc.paths)) {
 }
 ok.push(`${Object.keys(doc.paths).length} 条路径 / ${ops} 个操作`);
 
-// 宿主半侧的路由是 if (rest === 'x') 链加 scope 分支，rest 可能是两段（config/meta），
-// 所以两侧都归一化成一级段再比对，否则会互相误报。
-const host = readFileSync(HOST_SRC, 'utf8');
-const implemented = new Set([...host.matchAll(/rest === '([^']+)'/g)].map((m) => m[1].split('/')[0]));
-for (const s of ['font', 'pic', 'thumb']) implemented.add(s);
+// 宿主半侧的路由分派在各领域处理器里：精确匹配写 `rest === 'x'`，rest 可能是两段（config/meta）；
+// 素材领域按一级段兜底，写 `scope === 'x'`。所以两侧都归一化成一级段再比对，否则会互相误报。
+// 逐个处理器扫而不是只看分发器：分发器只列处理器，段名都在各自文件里。
+// 必须递归：领域处理器按子目录分（如 routes/config/），只扫一层会把子目录里的 rest 分支漏掉，
+// 于是「文档里有、实现也在」被误报成实现缺失。
+const routeSources = (dir) =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) return routeSources(full);
+    return entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts') ? [full] : [];
+  });
+
+const implemented = new Set();
+for (const file of routeSources(ROUTES_DIR)) {
+  const src = readFileSync(file, 'utf8');
+  for (const m of src.matchAll(/rest === '([^']+)'/g)) implemented.add(m[1].split('/')[0]);
+  // 素材领域既有正向分支，也有反向守卫（`scope !== 'thumb'` 才是 thumb 分支），两种都算。
+  for (const m of src.matchAll(/scope (?:===|!==) '([^']+)'/g)) implemented.add(m[1]);
+}
 const documented = new Set();
 for (const p of Object.keys(doc.paths)) {
   const seg = p.slice('/dsh-pet-7340/'.length).split('/')[0];

@@ -5,13 +5,15 @@
  * 任何可选能力缺失都只降级功能，绝不让整个插件加载失败。
  * @module dsh-pet/src/client/app
  */
-import { makePetUI } from './pet';
-import { readPose } from './pose';
-import { readProgress } from './progress';
-import { makePetConfigSection, NS, zh, en, petBridge } from './settings';
-import { initNotify } from './notify';
-import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces';
-import { installSectionNavIcon } from './nav-icon';
+import { makePetUI } from './pet.ts';
+import { readPose } from './pose.ts';
+import { readProgress } from './progress.ts';
+import { takeMenuEvents } from './menu-service.ts';
+import { getStateSnapshot } from './state-service.ts';
+import { makePetConfigSection, NS, zh, en, petBridge } from './settings.ts';
+import { initNotify } from './notify.ts';
+import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces.ts';
+import { installSectionNavIcon } from './nav-icon.ts';
 import type * as ReactNS from 'react';
 import type * as PrimitivesNS from '@deepseek-ai/dsh-client-ui-primitives';
 
@@ -68,11 +70,16 @@ export function makeFactory(): (require: (mod: string) => any) => any {
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-pet: dictionaries');
       const t = ctx.locale.bind(NS);
 
-      // 同页第三方插件可通过 Cordis 服务 petApi7340 读取本页宠物的实况与播放进度。
+      // 同页第三方插件可通过 Cordis 服务 petApi7340 读取本页宠物的实况、播放进度、最近一拍状态与菜单点击。
       // 只开读，控制仍走 HTTP，避免出现两条控制通道。
       // 服务名带 7340 后缀避免与生态里的同名服务冲突；Cordis 同名 provide 会直接抛错。
-      // 消费者用 ctx.get('petApi7340') 探测，拿不到就是老版本。
-      ctx.provide('petApi7340', { pose: readPose, progress: readProgress });
+      // 消费者用 ctx.get('petApi7340') 探测，拿不到就是老版本；`getState` / `menuEvents` 也要单独探测（老版本没有它们）。
+      ctx.provide('petApi7340', {
+        getState: getStateSnapshot,
+        menuEvents: takeMenuEvents,
+        pose: readPose,
+        progress: readProgress,
+      });
 
       // 系统通知：host 把通知帧写进 /state 的 sections.notify，统一轮询发现变化后弹 toast。
       ctx.effect(

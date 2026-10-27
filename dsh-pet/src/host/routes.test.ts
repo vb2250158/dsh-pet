@@ -215,19 +215,28 @@ describe('/state + /balance —— 轮询统一状态与余额动作端点', () 
     assert.equal((await call('/dsh-pet-7340/state', 'POST')).status, 405);
   });
 
-  test('只传 since / 只传 timeout → 400（成对必填，与 /playback 的 wait/timeout 同一套约定）', async () => {
-    assert.equal((await call('/dsh-pet-7340/state?since=0')).status, 400);
-    assert.equal((await call('/dsh-pet-7340/state?timeout=1000')).status, 400);
+  test('只传 since / 只传 timeout → 200 + bad-request（成对必填，与 /playback 的 wait/timeout 同一套约定）', async () => {
+    for (const q of ['since=0', 'timeout=1000']) {
+      const r = await call('/dsh-pet-7340/state?' + q);
+      assert.equal(r.status, 200, q);
+      const body = JSON.parse(r.body) as { ok: boolean; reason: string };
+      assert.equal(body.ok, false);
+      assert.equal(body.reason, 'bad-request');
+    }
   });
 
-  test('非法 since / timeout → 400（非整数、负数、小数、超上限）', async () => {
+  test('非法 since / timeout → 200 + bad-request（非整数、负数、小数、超上限）', async () => {
     for (const q of [
       'since=abc&timeout=1000',
       'since=-1&timeout=1000',
       'since=0&timeout=99999',
       'since=0&timeout=1.5',
     ]) {
-      assert.equal((await call('/dsh-pet-7340/state?' + q)).status, 400, q);
+      const r = await call('/dsh-pet-7340/state?' + q);
+      assert.equal(r.status, 200, q);
+      const body = JSON.parse(r.body) as { ok: boolean; reason: string };
+      assert.equal(body.ok, false, q);
+      assert.equal(body.reason, 'bad-request', q);
     }
   });
 
@@ -480,11 +489,12 @@ describe('thumb 路由 —— petId 不得当路径片段（PR #53 的不变式�
     assert.equal(r.body.includes(SECRET), false, '越根内容不得出现在响应体里');
   });
 
-  test('%2F 正斜杠被切成多段：穿越落在 fileName 段，由 resolveAsset 拦下 → 404', async () => {
-    // 注意与 %5C 的区别：正斜杠参与 split('/')，petId 只剩 '..'（点号属合法标识符字符，不进 400 分支），
-    // 穿越意图体现在 fileName = '../../outside/leak.webm' 上——那道防线是 resolveExisting 的根内校验。
+  test('%2F 正斜杠被切成多段：petId 只剩「..」，标识符规则当场拒 → 400', async () => {
+    // 注意与 %5C 的区别：正斜杠参与 split('/')，petId 只剩 '..'。点号本身是合法标识符字符，
+    // 但 '.' 与 '..' 作为目录名会把素材根顶到上一层，所以 isValidPetId 单独拦掉——早于第二层
+    // resolveExisting 的根内校验（名称段的穿越仍由那层兜住，见下一条用例）。
     const r = await call('/dsh-pet-7340/thumb/..%2F..%2F..%2Foutside/leak.webm');
-    assert.equal(r.status, 404);
+    assert.equal(r.status, 400);
     assert.equal(r.body.includes(SECRET), false);
   });
 
@@ -561,9 +571,11 @@ describe('pic/memes 路由 —— 素材根不得当路径片段（与 thumb 同
     }
   });
 
-  test('%2F 正斜杠被切成多段：穿越落在名称段，由 resolveAsset 拦下 → 404', async () => {
+  test('%2F 正斜杠被切成多段：素材根只剩「..」，标识符规则当场拒 → 400', async () => {
+    // 与 thumb 同一条规则：素材根是目录名，'.'/'..' 会被 isValidPetId 拦在这里。
+    // 名称段的穿越仍由 resolveExisting 兜住（见下一条）。
     const r = await call('/dsh-pet-7340/pic/memes/..%2F..%2F..%2Foutside-memes/leak.png');
-    assert.equal(r.status, 404);
+    assert.equal(r.status, 400);
     assert.equal(r.body.includes(SECRET), false);
   });
 
@@ -617,7 +629,8 @@ describe('pet 必填 —— 缺省一律 pet-required（issue #122 第 1 条：�
 
   test('/chat：方法不对仍是 405（pet 校验不抢在协议层错误前面）', async () => {
     assert.equal((await call('/dsh-pet-7340/chat', 'PUT')).status, 405);
-    assert.equal((await call('/dsh-pet-7340/chat', 'DELETE')).status, 405);
+    // DELETE 自删除记忆接口起是合法方法（见 chat-delete.test.ts），这里改用同样不被接受的 PATCH
+    assert.equal((await call('/dsh-pet-7340/chat', 'PATCH')).status, 405);
   });
 });
 
@@ -703,15 +716,17 @@ describe('?rounds= —— 非法值 bad-request，合法值不误杀（issue #14
   });
 });
 
-describe('/pet-display —— 业务失败一律 200 + ok:false（不用 400/404 表达业务结论）', () => {
-  test('GET → 405（写端点；方法错是协议层错误，照旧不是 200）', async () => {
-    assert.equal((await call('/dsh-pet-7340/pet-display')).status, 405);
+describe('/pet-display —— 业务失败 200 + 实体，协议失败用真实状态码', () => {
+  test('GET → 405 + method-not-allowed（方法错是协议失败，不由 handler 决定）', async () => {
+    const r = await call('/dsh-pet-7340/pet-display');
+    assert.equal(r.status, 405);
+    assert.equal((JSON.parse(r.body) as { reason: string }).reason, 'method-not-allowed');
   });
 
-  test('请求体不是合法 JSON → 400（协议层错误，与其它端点同一口径）', async () => {
+  test('请求体不是合法 JSON → 400 + invalid-json（协议失败）', async () => {
     const r = await call('/dsh-pet-7340/pet-display', 'POST', '{ 不是 json');
     assert.equal(r.status, 400);
-    assert.match(r.body, /invalid JSON body/);
+    assert.equal((JSON.parse(r.body) as { reason: string }).reason, 'invalid-json');
   });
 
   test('缺 id → 200 + pet-required（与 9 条 ?pet= 路由同一对词汇）', async () => {
@@ -769,16 +784,22 @@ describe('/work-status —— 外部写入工作状态', () => {
     assert.equal(again.status, 204);
   });
 
-  test('非法输入 → 400；GET → 405；body 超限 → 413', async () => {
-    const bad = [
-      '{',
-      JSON.stringify({ state: 'nope' }),
-      JSON.stringify({ state: 'working', task: 42 }),
-      JSON.stringify({ state: 'working', task: 'x'.repeat(41) }),
-    ];
-    for (const body of bad) {
+  test('坏 JSON → 400；业务参数非法 → 200 + bad-request；GET → 405；body 超限 → 413', async () => {
+    const malformed = await call('/dsh-pet-7340/work-status', 'POST', '{');
+    assert.equal(malformed.status, 400, '坏 JSON 是协议失败');
+    assert.equal((JSON.parse(malformed.body) as { reason: string }).reason, 'invalid-json');
+
+    for (const payload of [
+      { state: 'nope' },
+      { state: 'working', task: 42 },
+      { state: 'working', task: 'x'.repeat(41) },
+    ]) {
+      const body = JSON.stringify(payload);
       const r = await call('/dsh-pet-7340/work-status', 'POST', body);
-      assert.equal(r.status, 400, body.slice(0, 60));
+      assert.equal(r.status, 200, body.slice(0, 60));
+      const parsed = JSON.parse(r.body) as { ok: boolean; reason: string };
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.reason, 'bad-request');
     }
     assert.equal((await call('/dsh-pet-7340/work-status')).status, 405);
     const big = await call(
