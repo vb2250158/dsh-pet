@@ -1,7 +1,7 @@
 ## 0.3.8-fork.10
 
-- Require Host browser/API authentication and Host/Origin admission before voice catalog or synthesis requests; keep the private desktop bridge.
-- 语音音色列表及合成先通过宿主浏览器/API 认证与 Host/Origin 检查，保留私有桌面桥接入口。
+- Require Host browser/API authentication and Host/Origin admission before chat, orphan-memory management, voice catalog or synthesis requests; keep the private desktop bridge.
+- 对话、残留记忆管理、语音音色列表及合成先通过宿主浏览器/API 认证与 Host/Origin 检查，保留私有桌面桥接入口。
 
 ## 0.3.8-fork.9
 

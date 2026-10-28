@@ -84,8 +84,8 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
           try {
             const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
             const privatePath = decodeURIComponent(pathname).slice(ROUTE_PATH.length);
-            if (['/attachment', '/voice/voices', '/voice/speak'].includes(privatePath)) {
-              // Session images and voice synthesis require Host browser/API admission and its Host/Origin fence.
+            if (['/attachment', '/voice/voices', '/voice/speak', '/chat', '/chat/memory'].includes(privatePath)) {
+              // Private chat, images and voice require Host browser/API admission and its Host/Origin fence.
               // Standalone mode consumes the same domain handlers through its private bridge.
               const rejection =
                 typeof ctx.connection.requestRejection === 'function' ? ctx.connection.requestRejection(req) : 401;

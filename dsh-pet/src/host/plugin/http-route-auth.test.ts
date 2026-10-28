@@ -1,11 +1,11 @@
-/** Private image and voice routes use Host admission before dispatch. */
+/** Private chat, image and voice routes use Host admission before dispatch. */
 import assert from 'node:assert/strict';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
 import { test } from 'node:test';
 import { registerHttpRoute } from './http-route.ts';
 
-for (const path of ['%61ttachment?id=sha256:fixture', 'voice/voices', 'voice/speak']) {
+for (const path of ['%61ttachment?id=sha256:fixture', 'voice/voices', 'voice/speak', 'chat', 'chat/memory']) {
   for (const rejection of [401, 403, undefined]) {
     test(`${path} admission ${rejection ?? 'accepted'} precedes dispatch`, async () => {
       let handler: (req: IncomingMessage, res: ServerResponse) => Promise<void> = async () => {
