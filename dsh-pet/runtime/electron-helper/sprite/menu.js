@@ -7,6 +7,9 @@
  */
 'use strict';
 
+// 菜单首项文案随宿主形态变：桌面应用唤起主窗口，独立模式打开本机 AI 设置页，web 宿主打开站点。
+const OPEN_LABEL = { desktop: '打开软件', standalone: '打开 AI 设置', web: '打开网站' };
+
 Object.assign(PetSprite.prototype, {
   onContextMenu(e) {
     const d = this.dragState;
@@ -15,10 +18,10 @@ Object.assign(PetSprite.prototype, {
     this.stopThrow(); // 菜单弹出前停住飞行中的宠物
     this.stopMove(); // 菜单悬停期间宠物不漫游
     // 桌面专属工具根项 + 共享菜单树（动作 → 分类 → 具体动画）。碎碎念/对话无条件显示：手动触发
-    // 不受 whisperEnabled 限制（该字段只影响自动轮询）。首项文案随宿主形态变：桌面宿主说「打开软件」。
+    // 不受 whisperEnabled 限制（该字段只影响自动轮询）。首项文案与去向随宿主形态变，见 OPEN_LABEL。
     const tools = [
       {
-        label: OPEN_TARGET === 'desktop' ? '打开软件' : '打开网站',
+        label: OPEN_LABEL[OPEN_TARGET],
         action: 'open-site',
         hint: OPEN_SHORTCUT_HINT,
       },
@@ -152,6 +155,9 @@ Object.assign(PetSprite.prototype, {
   // 挂着的长轮询送达。手动触发不受 whisperEnabled 限制（该字段只关自动周期）。
   showWhisperFromMenu() {
     // surface 必填：本窗口就是桌面端
+    // 桌面窗口是 file://，语音接口得走 bridge 绝对地址；标记归本端，周期碎碎念没有标记所以不播。
+    S.setVoiceBase(BASE);
+    S.markVoicePending();
     S.postAction(WHISPER_URL + '?pet=' + encodeURIComponent(this.pet.id) + '&surface=desktop')
       .then((ok) => {
         if (!ok) console.warn('[dsh-pet] 菜单碎碎念：生成动作未成功 pet=' + this.pet.id);
@@ -171,6 +177,8 @@ Object.assign(PetSprite.prototype, {
       this.chatClose = null;
       return; // 已开着：先关旧的
     }
+    // 语音接口同样走 bridge 地址；对话的待播标记由 shared/chat/send 在发送时打
+    S.setVoiceBase(BASE);
     const m = S.mountChatDialog({
       petId: this.pet.id,
       baseUrl: BASE + '/chat',

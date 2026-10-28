@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet",
-  "version": "0.3.8-fork.8",
+  "version": "0.3.8-fork.9",
   "description": "Display a draggable animated pet with companion chat, speech bubbles and wallet management.",
   "icon": "dsh-pet/assets/logo.png",
   "keywords": [
@@ -72,7 +72,8 @@
     "@electron/get": "^5.1.0",
     "@anthropic-ai/sdk": "0.135.0",
     "openai": "7.39.0",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "@andresaya/edge-tts": "^1.9.1"
   },
   "dsh": {
     "bundle": {

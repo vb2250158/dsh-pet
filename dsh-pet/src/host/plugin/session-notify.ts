@@ -11,6 +11,12 @@ import type { WorkStatusBridge } from './work-status-bridge.ts';
 import type { HostSetup } from './setup.ts';
 import type { HostContext } from './context.ts';
 
+/** 在途调用的键：宿主给的 `callId`；没有标识时用临时 `Symbol` 占位。 */
+export type ToolCallKey = string | symbol;
+
+/** 每会话在途调用的记账表：会话标识 → （调用键 → 气泡文案）。 */
+export type ToolCallLedger = Map<string, Map<ToolCallKey, string>>;
+
 /** 会话通知的输入：装配期对象与更早的工厂。 */
 export type SessionNotifyInput = {
   /** 宿主上下文（apply 收到的那一个）。 */
@@ -45,16 +51,10 @@ export function createSessionNotify(deps: SessionNotifyInput) {
   const lastTodoText = new Map<string, string | null>();
 
   /**
-   * 每会话「正在跑、且气泡上有具体描述」的工具数（不是布尔）：并行调用时先返回的那个不该把
-   * 仍在中途的另一个描述顶掉。只统计拿到了目标的调用——没写出描述就不该占位。
+   * 每会话在途调用的详情：键为调用标识（缺标识时用临时 `Symbol`），值为气泡文案。
+   * 结果事件只删自己那一条，并行调用因此不会互相顶掉，全部删完才回落 todo 文案。
    */
-  const toolsInFlight = new Map<string, number>();
-
-  const bumpToolsInFlight = (sessionId: string, delta: number): void => {
-    const next = (toolsInFlight.get(sessionId) ?? 0) + delta;
-    if (next > 0) toolsInFlight.set(sessionId, next);
-    else toolsInFlight.delete(sessionId);
-  };
+  const toolsInFlight: ToolCallLedger = new Map();
 
   /** 取消某会话待执行的终态清理：会话已回到非终态，那次清理到点后既不清理也不重排，留着只会误导 */
   const cancelTerminalCleanup = (sessionId: string): void => {
@@ -131,7 +131,6 @@ export function createSessionNotify(deps: SessionNotifyInput) {
     terminalTimers,
     lastTodoText,
     toolsInFlight,
-    bumpToolsInFlight,
     cancelTerminalCleanup,
     scheduleTerminalCleanup,
     notifyActivityTimers,

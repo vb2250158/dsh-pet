@@ -26,3 +26,4 @@ export * from './work-status.ts';
 export * from './state.ts';
 export * from './tooltip.ts';
 export * from './typography.ts';
+export * from './voice.ts';

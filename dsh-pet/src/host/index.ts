@@ -18,11 +18,12 @@ import { createSessionNotify } from './plugin/session-notify.ts';
 import { createPetLookup } from './plugin/pet-lookup.ts';
 import { createDownloadReport } from './plugin/download-report.ts';
 import { createWorkStatusBridge } from './plugin/work-status-bridge.ts';
+import { createVoiceService } from './voice/speak.ts';
 import type { PetRouteDeps } from './routes/types.ts';
 
 /** 插件行 id（与 cordis.patch.yml 一致） */
 export const name = 'pet';
-/** 需要注入的服务：webServer（路由）+ agentDefaultModel（当前服务商）+ credentials（凭证）+ llm（对话模型调用）+ commands（/balance 斜杠命令）+ connection（桌面 Helper「打开网站」用的已鉴权站点 URL） */
+/** 需要注入的服务：webServer（路由）+ agentDefaultModel（当前服务商）+ credentials（凭证）+ llm（对话模型调用）+ commands（/balance 斜杠命令）+ connection（桌面 Helper「打开 AI 设置」用的已鉴权站点 URL） */
 export const inject = ['webServer', 'agentDefaultModel', 'credentials', 'llm', 'commands', 'connection'];
 
 /** 宿主插件主体：注册 `/dsh-pet-7340` 前缀路由与斜杠命令（/balance /pet /chat）；ctx 暂用 any（peer 类型包本地不可解析）。 */
@@ -60,7 +61,6 @@ export function apply(ctx: any): void {
     terminalTimers,
     lastTodoText,
     toolsInFlight,
-    bumpToolsInFlight,
     cancelTerminalCleanup,
     scheduleTerminalCleanup,
     notifyActivityTimers,
@@ -94,13 +94,14 @@ export function apply(ctx: any): void {
     ...desktopHelper,
     ...sessionNotify,
     ctx,
+    // 语音合成：缓存落 userRoot，失败只留日志，不打断宿主
+    voice: createVoiceService({ userRoot, log }),
   };
   const httpRoute = createHttpRoute(deps);
   registerHttpRoute(ctx, httpRoute.handlePetRoute);
 
   registerSessionWatch({
     ctx,
-    bumpToolsInFlight,
     cancelTerminalCleanup,
     lastTodoText,
     notifyActivityTimers,

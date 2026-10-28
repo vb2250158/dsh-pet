@@ -16,6 +16,7 @@ import type { MenuRegistry } from '../menu.ts';
 import type { PlaybackStore } from '../playback.ts';
 import type { PoseStore } from '../pose.ts';
 import type { PollStateStore } from '../state.ts';
+import type { VoiceService } from '../voice/speak.ts';
 import type { WorkStatusStore } from '../work-status.ts';
 
 /** 一次路由调用的输入：URL 已解析，`rest` 是去掉前缀并解码后的路径。 */
@@ -129,8 +130,14 @@ export interface PetRouteDeps {
     petId: string,
     ts?: readonly number[],
   ) => Promise<{ ok: true; removed: number } | { ok: false; reason: 'unknown-pet'; message: string }>;
+  /** 已删宠物残留的记忆桶（配置里已没有这只宠物）。 */
+  readonly orphanHistory: () => Promise<{ entry: string; petId: string; messages: number; lastTs: number }[]>;
+  /** 清掉所有已删宠物的历史。 */
+  readonly deleteOrphans: () => Promise<{ ok: true; pets: number; messages: number }>;
   /** 用户动画目录（按扩展名）。 */
   readonly userRootFor: (ext: string) => string;
   /** 包内动画目录（按扩展名）。 */
   readonly assetRootFor: (ext: string) => string;
+  /** 语音合成服务（校验、排队、缓存与上游调用都在里面）。 */
+  readonly voice: VoiceService;
 }

@@ -142,6 +142,8 @@ before(() => {
         {
           method,
           url,
+          // 真实 IncomingMessage 恒有 headers；sendFile 用它读 Range
+          headers: {},
           on: (event: string, cb: (chunk?: Buffer) => void) => {
             if (event === 'data' && body !== undefined) queueMicrotask(() => cb(Buffer.from(body, 'utf8')));
             if (event === 'end') queueMicrotask(() => cb());
@@ -554,6 +556,16 @@ describe('pic/memes 路由 —— 表情包素材归属（与 thumb 同一套语
   test('通知图标（/pic/<名>.png）不受影响：仍只从包内 assets/pic 取', async () => {
     // 源码形态下包内 assets 不可达 → 404（关键是不被 memes 分支吞掉）
     assert.equal((await call('/dsh-pet-7340/pic/logo.png')).status, 404);
+  });
+});
+
+describe('/logo —— 插件 logo（对话面板的宠物头像）', () => {
+  test('只接受裸路径：多一段就 400，不把 assets 根开放成静态目录', async () => {
+    assert.equal((await call('/dsh-pet-7340/logo/x.png')).status, 400);
+  });
+
+  test('源码形态下包内 assets 不可达 → 404（真实安装里读 assets/logo.png）', async () => {
+    assert.equal((await call('/dsh-pet-7340/logo')).status, 404);
   });
 });
 
