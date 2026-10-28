@@ -1,5 +1,8 @@
 ## 0.3.8-fork.9
 
+- Package the split installation and feature guides referenced by the installed README.
+- 安装包包含 README 新链接的安装与功能文档。
+
 - Integrate upstream chat and optional speech, drag/motion, asset range and log-flush changes; retain authenticated Session images, default GPU sandbox, isolated Electron profiles, system typography and readable bubbles.
 - 合入上游聊天与可选语音、拖拽走位、资源分段及日志收尾；保留会话图片认证、默认 GPU 沙箱、独立 Electron 数据目录、系统字体和气泡可读性。
 

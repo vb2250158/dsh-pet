@@ -54,7 +54,10 @@
     "dsh-pet/scripts/ensure-electron.mjs",
     "dsh-pet/cordis.patch.yml",
     "locale",
-    "dsh-pet/assets/sound"
+    "dsh-pet/assets/sound",
+    "INSTALL.md",
+    "FEATURES.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "npm --prefix dsh-pet run build",
