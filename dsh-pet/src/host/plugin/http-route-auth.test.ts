@@ -5,9 +5,19 @@ import { Socket } from 'node:net';
 import { test } from 'node:test';
 import { registerHttpRoute } from './http-route.ts';
 
-for (const path of ['%61ttachment?id=sha256:fixture', 'voice/voices', 'voice/speak', 'chat', 'chat/memory']) {
+for (const [path, method] of [
+  ['%61ttachment?id=sha256:fixture', 'GET'],
+  ['voice/voices', 'GET'],
+  ['voice/speak', 'GET'],
+  ['chat', 'GET'],
+  ['chat/memory', 'GET'],
+  ['todos', 'GET'],
+  ['todos', 'POST'],
+  ['%74odos/todo-1', 'PATCH'],
+  ['todos/todo-1', 'DELETE'],
+]) {
   for (const rejection of [401, 403, undefined]) {
-    test(`${path} admission ${rejection ?? 'accepted'} precedes dispatch`, async () => {
+    test(`${method} ${path} admission ${rejection ?? 'accepted'} precedes dispatch`, async () => {
       let handler: (req: IncomingMessage, res: ServerResponse) => Promise<void> = async () => {
         assert.fail('Route was not registered');
       };
@@ -30,10 +40,12 @@ for (const path of ['%61ttachment?id=sha256:fixture', 'voice/voices', 'voice/spe
         },
       );
       const req = new IncomingMessage(new Socket());
-      req.method = 'GET';
+      req.method = method;
       req.url = '/dsh-pet-7340/' + path;
       const res = new ServerResponse(req);
-      await handler(req, res);
+      const pending = handler(req, res);
+      req.push(null);
+      await pending;
       assert.equal(admissions, 1);
       assert.equal(dispatches, rejection === undefined ? 1 : 0);
       assert.equal(res.statusCode, rejection ?? 404);

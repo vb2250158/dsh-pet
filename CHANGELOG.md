@@ -1,3 +1,9 @@
+## 0.3.8-fork.11
+
+- 合入上游待办、通知正文、拖图、设置下拉与本期用量；保留既有宿主认证、GPU 沙箱和 Electron 数据隔离。
+- 待办读写要求宿主认证；读取失败、文件损坏或版本不支持时拒绝写入，保留用户文件。
+- 独立模式复用同一 HTTP 安全入口的授权请求，修复已授权对话被重复拒绝的问题；待办、附件和语音读取仍需有效凭据。
+
 ## 0.3.8-fork.10
 
 - Require Host browser/API authentication and Host/Origin admission before chat, orphan-memory management, voice catalog or synthesis requests; keep the private desktop bridge.

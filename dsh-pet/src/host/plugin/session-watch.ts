@@ -8,6 +8,7 @@ import { GOAL_UPDATE_TOOL, currentTaskFromTodo, goalUpdateAction, reduceWorkStat
 import { toolDetailFromEvent } from '../tool-detail.ts';
 import {
   agentErrorFrame,
+  lastAssistantText,
   isCompletionTurnEnd,
   reduceNotifyFrame,
   sessionIdOf,
@@ -25,6 +26,7 @@ export type SessionWatchInput = {
   ctx: HostContext;
 } & Pick<SessionNotify, 'cancelTerminalCleanup'> &
   Pick<SessionNotify, 'lastTodoText'> &
+  Pick<SessionNotify, 'lastReplyText'> &
   Pick<SessionNotify, 'notifyActivityTimers'> &
   Pick<WorkStatusBridge, 'publishWorkStatus'> &
   Pick<SessionNotify, 'pushNotifyFrame'> &
@@ -135,6 +137,7 @@ export function registerSessionWatch(deps: SessionWatchInput): void {
     ctx,
     cancelTerminalCleanup,
     lastTodoText,
+    lastReplyText,
     notifyActivityTimers,
     publishWorkStatus,
     pushNotifyFrame,
@@ -268,6 +271,12 @@ export function registerSessionWatch(deps: SessionWatchInput): void {
         // 判据用 header.origin（不是 parentSession，那会把普通 fork 的主对话一起静音），
         // 判据不可用时放行，绝不把通知整体打哑。详见 notify-events.ts 的 shouldNotifySession。
         if (!shouldNotifySession(session)) return;
+        // 回复正文来源：只记最近一段 assistant 文本，供完成通知的正文使用。取不到就不记，
+        // 下游回落空正文（宁可少一行字，也不能让通知整体失效）。
+        if (event?.type === 'assistant/message') {
+          const text = lastAssistantText(event as { type?: string; data?: Record<string, unknown> });
+          if (text) lastReplyText.set(sessionIdOf(session), text);
+        }
         // 活动门（issue #114）：「对话完成」延迟确认这条会话确实没活了再弹——团队会话里 Lead 的
         // 这一轮结束 ≠ 团队收工，成员还在跑时弹「对话完成」是误报。生成失败/输出截断、权限申请、
         // 用户选择不过这道门，直接放行（理由见 notify-events.ts 的 isCompletionTurnEnd）。
@@ -275,6 +284,8 @@ export function registerSessionWatch(deps: SessionWatchInput): void {
           scheduleCompletionNotify(sessionIdOf(session), event);
           return;
         }
+        // 非完成收尾（出错 / 输出截断 / 中止）用不到这段正文，一并清掉，免得留到下一次完成。
+        if (event?.type === 'turn/end') lastReplyText.delete(sessionIdOf(session));
         const frame = reduceNotifyFrame(event as Parameters<typeof reduceNotifyFrame>[0]);
         // 帧带上「这条通知是哪条会话发出的」：点击时网页据此跳到那条会话（见 withSessionId）
         if (frame) pushNotifyFrame(withSessionId(frame, sessionIdOf(session)));

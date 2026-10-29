@@ -12,6 +12,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 export interface RequestSecurity {
   /** 进程能力令牌，只写入本机启动清单，绝不进 HTTP 响应或日志。 */
   readonly token: string;
+  /** 复用当前安全入口已验证的请求；其它请求返回 401。 */
+  requestRejection(req: IncomingMessage): 401 | undefined;
   /** 生成带令牌的设置页地址。 */
   authenticatedUrl(baseUrl: string): string;
   /** 判定请求是否放行；拒绝时已经写好响应。 */
@@ -31,7 +33,7 @@ function publicRead(req: IncomingMessage): boolean {
   const path = decodeURIComponent(new URL(req.url ?? '/', 'http://127.0.0.1').pathname);
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
   if (['/standalone-ai/settings', '/shutdown'].includes(path)) return false;
-  if (/^\/dsh-pet-\d+\/(?:whisper|chat)(?:\/|$)/.test(path)) return false;
+  if (/^\/dsh-pet-\d+\/(?:whisper|chat|todos|attachment|voice)(?:\/|$)/.test(path)) return false;
   return (
     ['/', '/health', '/standalone-ai/', '/standalone-ai/settings.js', '/standalone-ai/settings.css'].includes(path) ||
     /^\/dsh-pet-\d+\//.test(path)
@@ -41,8 +43,10 @@ function publicRead(req: IncomingMessage): boolean {
 /** 创建请求安全门面。 */
 export function createRequestSecurity(): RequestSecurity {
   const token = randomBytes(32).toString('base64url');
+  const admitted = new WeakSet<IncomingMessage>();
   return {
     token,
+    requestRejection: (req) => (admitted.has(req) ? undefined : 401),
     authenticatedUrl(baseUrl) {
       const base = new URL(baseUrl);
       if (
@@ -85,6 +89,7 @@ export function createRequestSecurity(): RequestSecurity {
       ) {
         return rejectRequest(res, 403, '请从桌宠菜单重新打开设置');
       }
+      admitted.add(req);
       return true;
     },
   };

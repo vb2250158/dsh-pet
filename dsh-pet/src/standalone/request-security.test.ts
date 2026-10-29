@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import { ServerResponse, type IncomingMessage } from 'node:http';
 import { createRequestSecurity } from './request-security.ts';
 
 function request(headers: Record<string, string> = {}, url = '/private', method = 'GET'): IncomingMessage {
@@ -40,6 +40,10 @@ test('encoded private routes still require a capability; invalid encodings fail 
     '/dsh-pet-7340/ch%61t',
     '/dsh-pet-7340/chat%2Fhistory',
     '/dsh-pet-7340/%77hisper',
+    '/dsh-pet-7340/%74odos',
+    '/dsh-pet-7340/todos/todo-1',
+    '/dsh-pet-7340/voice/voices',
+    '/dsh-pet-7340/%61ttachment',
   ]) {
     for (const method of ['GET', 'HEAD']) {
       const res = response();
@@ -177,4 +181,14 @@ test('only minimal health, settings shell and known media GET are public; public
       path,
     );
   }
+});
+
+test('已授权请求只在所属安全实例中可回读', () => {
+  const security = createRequestSecurity();
+  const req = request({ 'x-dsh-pet-token': security.token }, '/dsh-pet-7340/todos');
+  const res = new ServerResponse(req);
+  assert.equal(security.requestRejection(req), 401);
+  assert.equal(security.authorize(req, res), true);
+  assert.equal(security.requestRejection(req), undefined);
+  assert.equal(createRequestSecurity().requestRejection(req), 401);
 });

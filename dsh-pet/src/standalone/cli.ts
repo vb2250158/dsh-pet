@@ -52,6 +52,7 @@ async function run(logger: StandaloneLogger, options: { port: number }): Promise
     routes,
     ai,
     authenticatedUrl: security.authenticatedUrl,
+    requestRejection: security.requestRejection,
     // 托盘退出与 POST /shutdown 走同一条收尾路径。
     shutdown: (reason) => forwardShutdown(reason),
   });

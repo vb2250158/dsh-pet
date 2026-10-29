@@ -43,6 +43,8 @@ export interface StandaloneContextOptions {
   ai?: StandaloneModelService;
   /** 给地址附加访问凭据的包装。 */
   authenticatedUrl?: (baseUrl: string) => string;
+  /** 由同一 HTTP 安全入口提供已授权请求的回读。 */
+  requestRejection?: (req: IncomingMessage) => 401 | undefined;
   /**
    * 关掉整个独立模式进程的能力（桌面 Helper 托盘的「退出」）。
    *
@@ -153,7 +155,10 @@ export function createStandaloneContext(options: StandaloneContextOptions): Stan
     },
     logger,
     webServer,
-    connection: { authenticatedUrl: options.authenticatedUrl ?? ((baseUrl: string): string => baseUrl) },
+    connection: {
+      authenticatedUrl: options.authenticatedUrl ?? ((baseUrl: string): string => baseUrl),
+      requestRejection: options.requestRejection ?? (() => 401),
+    },
     ...(ai
       ? {
           standaloneAi: {

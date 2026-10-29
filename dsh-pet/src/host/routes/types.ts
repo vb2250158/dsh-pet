@@ -16,6 +16,7 @@ import type { MenuRegistry } from '../menu.ts';
 import type { PlaybackStore } from '../playback.ts';
 import type { PoseStore } from '../pose.ts';
 import type { PollStateStore } from '../state.ts';
+import type { TodoStore } from '../todo/store.ts';
 import type { VoiceService } from '../voice/speak.ts';
 import type { WorkStatusStore } from '../work-status.ts';
 
@@ -36,7 +37,11 @@ export interface RouteInput {
 /** 碎碎念与对话共用的生成结果。 */
 export type GeneratedReply =
   | { ok: true; text: string; image?: string }
-  | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string };
+  | {
+      ok: false;
+      reason: 'provider-missing' | 'generate-error' | 'unknown-pet' | 'unknown-image';
+      message?: string;
+    };
 
 /** 宠物定位结果：命中给出所在层与条目，未命中给出可直接返回的应答。 */
 export type PetLookup =
@@ -65,6 +70,8 @@ export interface PetRouteDeps {
   readonly menuRegistry: MenuRegistry;
   /** 轮询快照（前端 1s 轮询的唯一数据源）。 */
   readonly state: PollStateStore;
+  /** 待办清单（单个 JSON 文件，读改写串行）。 */
+  readonly todos: TodoStore;
   /** 工作状态联动快照。 */
   readonly workStatus: WorkStatusStore;
   /** 外部写入用的固定会话 id。 */
@@ -115,8 +122,8 @@ export interface PetRouteDeps {
   readonly memesUserRoot: string;
   /** 刷新余额（manual 表示用户主动触发）。 */
   readonly refreshBalance: (manual?: boolean) => Promise<void>;
-  /** 生成一条碎碎念。 */
-  readonly publishWhisper: (petId: string) => Promise<GeneratedReply>;
+  /** 生成一条碎碎念；image 给了就用这张图（需在池内），缺省 = 按配置随机抽一张或纯文本。 */
+  readonly publishWhisper: (petId: string, image?: string) => Promise<GeneratedReply>;
   /** 读取对话记忆文件。 */
   readonly readMemory: () => Promise<Record<string, Record<string, { messages: ChatMemoryMessage[] }>>>;
   /** 对话记忆文件路径。 */

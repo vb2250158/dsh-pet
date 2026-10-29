@@ -6,11 +6,14 @@
  */
 import { CHAT_HOTKEY_HINT, mountChatDialog } from '../../../shared/chat/index.ts';
 import { captureDisplayFrame } from '../../../shared/chat/capture.ts';
+import { TODO_HOTKEY_HINT, isTodoHotkey } from '../../../shared/todo/hotkey.ts';
 import { bindOpenChat } from './open-chat.ts';
 import {
+  buildMemeBranch,
   buildMenuTree,
   buildMoreBranch,
   displayMenuBranch,
+  memeThumbUrl,
   mountContextMenu,
   type MenuNode,
 } from '../../../shared/menu.ts';
@@ -49,6 +52,10 @@ export interface CardEntryInput {
   menuItemsRef: ReactNS.MutableRefObject<MenuMoreItem[]>;
   /** 菜单动作派发。 */
   runMenuAction: MenuActions['run'];
+  /** 打开待办面板：面板占气泡槽，显隐归气泡单槽管。 */
+  showTodo: () => void;
+  /** 开关待办面板：D 键用，已开则收起。 */
+  toggleTodo: () => void;
   /** 悬浮提示节点：位置由本模块直接写 style。 */
   tipRef: ReactNS.MutableRefObject<HTMLDivElement | null>;
   /** 舞台节点：对话弹窗贴命中区右上角。 */
@@ -63,6 +70,8 @@ export interface CardEntry {
   handleContextMenu: (e: ReactNS.MouseEvent<HTMLDivElement>) => void;
   /** 打开对话弹窗：菜单里「对话」那一项走这里；带图时直接进入待发送状态（拖拽用）。 */
   openChat: (image?: File) => void;
+  /** 打开待办面板（右键菜单入口）。 */
+  openTodo: () => void;
   /** 指针进入：先摆位再显示。 */
   onPointerEnter: (e: ReactNS.PointerEvent<HTMLDivElement>) => void;
   /** 指针离开：收起提示。 */
@@ -79,7 +88,8 @@ export function createCardEntry(rt: CardEntryRuntime) {
   const { useEffect, useRef } = rt;
 
   return function useCardEntry(input: CardEntryInput): CardEntry {
-    const { card, cfgRef, drag, live, menuItemsRef, motion, runMenuAction, stage, tipRef } = input;
+    const { card, cfgRef, drag, live, menuItemsRef, motion, runMenuAction, showTodo, stage, tipRef, toggleTodo } =
+      input;
     // 右键菜单与对话弹窗当前的 close 句柄，卸载或重开前清理。
     const menuRef = useRef<{ close: () => void } | null>(null);
     const chatRef = useRef<{ close: () => void } | null>(null);
@@ -139,6 +149,9 @@ export function createCardEntry(rt: CardEntryRuntime) {
       });
     };
 
+    /** 打开待办面板：面板占气泡槽，重复点击是幂等的。 */
+    const openTodo = (): void => showTodo();
+
     // 悬停标记：快捷键与拖拽都只在"鼠标停在这只宠物上"时生效，避免和页面其它交互抢事件。
     const hoverRef = useRef(false);
     // 挂载时注册一次监听，但始终调用最新的 openChat 闭包（它读 ref，不能捕获旧值）。
@@ -147,15 +160,27 @@ export function createCardEntry(rt: CardEntryRuntime) {
     // stage 是 getter（首次渲染时节点还不存在），effect 里再取一次，并用 ref 避开依赖告警。
     const stageGetterRef = useRef(stage);
     stageGetterRef.current = stage;
-    useEffect(
-      () =>
-        bindOpenChat({
-          stage: stageGetterRef.current(),
-          isHovered: () => hoverRef.current,
-          openChat: (image) => openChatRef.current(image),
-        }),
-      [],
-    );
+    // 待办开关同样只在悬停时生效；存 ref 是因为它每次渲染都新建，闭包会捕获旧的那份。
+    const toggleTodoRef = useRef(toggleTodo);
+    toggleTodoRef.current = toggleTodo;
+    // 两个快捷键共用一次挂载：T 开对话、D 开关待办，都只在鼠标停在这只宠物上时生效。
+    useEffect(() => {
+      const offChat = bindOpenChat({
+        stage: stageGetterRef.current(),
+        isHovered: () => hoverRef.current,
+        openChat: (image) => openChatRef.current(image),
+      });
+      const onKeyDown = (e: KeyboardEvent): void => {
+        if (!hoverRef.current || !isTodoHotkey(e)) return;
+        e.preventDefault();
+        toggleTodoRef.current();
+      };
+      document.addEventListener('keydown', onKeyDown, true);
+      return () => {
+        offChat();
+        document.removeEventListener('keydown', onKeyDown, true);
+      };
+    }, []);
     // 菜单的动作面里含「对话」一条，回调注册一次即可：弹窗句柄在闭包里。
     live.current.placeTip = placeTip;
     live.current.tipOn = () => card.state.tipOn;
@@ -165,9 +190,16 @@ export function createCardEntry(rt: CardEntryRuntime) {
       // 工具项与动作树；「查看余额」无条件显示，手动请求不受开关限制。
       // 第三方菜单项收在「更多」下，0 项不出现，单 owner 单条时平铺（见 buildMoreBranch）。
       const more = buildMoreBranch(menuItemsRef.current);
+      // 「配图」：按配置里的清单分成「纳入对话的配图 / 其他」，点一张就用它说一句。
+      // 没有可用图时返回 null，整项不出现（不占一个点开是空的菜单）。
+      // 缩略图靠 /pic/memes/<素材根>/<名称>.png：素材根就是拍平时写入的条目 key。
+      const pic = cfgRef.current;
+      const memes = buildMemeBranch(pic, (name) => memeThumbUrl(ROUTE_PATH, pic.assetRoot, name));
       const tools: MenuNode[] = [
         { label: '查看余额', action: 'show-balance' },
+        { label: '待办事项', action: 'todo', hint: TODO_HOTKEY_HINT },
         { label: '碎碎念', action: 'whisper' },
+        ...(memes ? [memes] : []),
         { label: '对话', action: 'chat', hint: CHAT_HOTKEY_HINT },
         { label: '回到初始位置', action: 'home' },
         // 显示位置子菜单与桌面端同一份；改成不含 web 的值后本宠物会从页面消失。
@@ -205,6 +237,7 @@ export function createCardEntry(rt: CardEntryRuntime) {
         card.actions.setTipOn(false);
       },
       openChat,
+      openTodo,
       placeTip,
     };
   };

@@ -84,8 +84,13 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
           try {
             const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
             const privatePath = decodeURIComponent(pathname).slice(ROUTE_PATH.length);
-            if (['/attachment', '/voice/voices', '/voice/speak', '/chat', '/chat/memory'].includes(privatePath)) {
-              // Private chat, images and voice require Host browser/API admission and its Host/Origin fence.
+            if (
+              ['/attachment', '/voice/voices', '/voice/speak', '/chat', '/chat/memory', '/todos'].includes(
+                privatePath,
+              ) ||
+              privatePath.startsWith('/todos/')
+            ) {
+              // 私有对话、图片、语音与待办统一要求宿主认证及 Host/Origin 检查。
               // Standalone mode consumes the same domain handlers through its private bridge.
               const rejection =
                 typeof ctx.connection.requestRejection === 'function' ? ctx.connection.requestRejection(req) : 401;
@@ -95,7 +100,9 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
                 return;
               }
             }
-            const body = req.method === 'PUT' || req.method === 'POST' ? await readBody(req) : undefined;
+            // PATCH 也带体（待办的部分更新）；GET / DELETE 不读，避免无谓地等一个不会来的结束事件。
+            const readsBody = req.method === 'PUT' || req.method === 'POST' || req.method === 'PATCH';
+            const body = readsBody ? await readBody(req) : undefined;
             const result = await handlePetRoute(req.url ?? '/', req.method ?? 'GET', body, abort.signal);
             res.off('close', onClose);
             if (result.kind === 'json') sendJson(res, result.status, result.obj, result.headers);

@@ -109,6 +109,15 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 | `POST /dsh-pet-7340/voice/speak` | 合成并返回 mp3：`{ text, voice?, rate? }`；同一输入命中缓存，队列最多排 3 个 |
 | `GET /dsh-pet-7340/voice/voices` | 可用音色列表；前端拿它渲染选择器，不要硬编码 id |
 
+## 十、待办事项
+
+| 接口 | 功能 |
+| --- | --- |
+| `GET /dsh-pet-7340/todos` | 读取待办清单（未完成在前、到期越近越靠前，无期限垫底） |
+| `POST /dsh-pet-7340/todos` | 新建一条：`{ text, dueAt? }`，`dueAt` 为 epoch 毫秒或 `null` |
+| `PATCH /dsh-pet-7340/todos/{id}` | 修改一条：`{ text?, dueAt?, done? }` 至少给一个 |
+| `DELETE /dsh-pet-7340/todos/{id}` | 删除一条（幂等，回 `removed` 条数） |
+
 ---
 
 ## state 详解

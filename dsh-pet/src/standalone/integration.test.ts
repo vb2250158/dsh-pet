@@ -35,6 +35,7 @@ let server: StandaloneServer | undefined;
 let context: ReturnType<typeof createStandaloneContext> | undefined;
 let savedHome: string | undefined;
 let savedElectron: string | undefined;
+const security = createRequestSecurity();
 
 before(async () => {
   home = mkdtempSync(join(tmpdir(), 'dsh-pet-standalone-'));
@@ -46,7 +47,12 @@ before(async () => {
 
   const routes: RegisteredRoute[] = [];
   const portRef = { value: 0 };
-  const created = createStandaloneContext({ port: () => portRef.value, logger: silent, routes });
+  const created = createStandaloneContext({
+    port: () => portRef.value,
+    logger: silent,
+    routes,
+    requestRejection: security.requestRejection,
+  });
   const listening = await listenStandaloneServer({
     routes,
     logger: silent,
@@ -82,7 +88,6 @@ async function get(path: string): Promise<{ status: number; text: string; json: 
 }
 
 test('real plugin chat routes cannot bypass the standalone capability using encoded names', async () => {
-  const security = createRequestSecurity();
   const protectedServer = await listenStandaloneServer({
     routes: context?.routes ?? [],
     logger: silent,
@@ -91,7 +96,7 @@ test('real plugin chat routes cannot bypass the standalone capability using enco
   });
   try {
     const prefix = `http://127.0.0.1:${protectedServer.port}/dsh-pet-7340/`;
-    for (const name of ['chat', '%63hat', 'ch%61t']) {
+    for (const name of ['chat', '%63hat', 'ch%61t', 'todos', '%74odos/todo-1', 'voice/voices', 'attachment']) {
       const response = await fetch(prefix + name + '?pet=main');
       assert.equal(response.status, 403);
       await response.text();

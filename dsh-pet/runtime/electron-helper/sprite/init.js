@@ -74,8 +74,8 @@ Object.assign(PetSprite.prototype, {
     this.tipCursor = null;
     this.balanceView = null;
     this.balanceWrap = false; // true = 当前余额气泡是不可用的「文字说明」（多行，需换行变体）
-    this.balanceState = null; // 最近一次余额读数（展开态要用它算三窗口行；balanceView 只是收起态的行）
-    this.balanceViewIndex = 0; // 当前页：点一下气泡切下一页（内置 windows 是 收起/展开 两页；custom 是 views.length 页）
+    this.balanceState = null; // 最近一次余额读数（展开态按页现算窗口明细与用量；balanceView 只是收起态的行）
+    this.balanceViewIndex = 0; // 当前页：点一下切下一页（windows 是收起 / 窗口明细 / 用量，有用量才有第三页；custom 是 views.length 页）
     this.balanceFadeTimer = null; // 展开/收起的淡出等待（250ms 后才换内容，避免硬切）
     this.prevTick = 0;
     // 说话（碎碎念/命令气泡/对话回复）：文本与配图由容器统一轮询 /state 后经 showWhisper 送进来。
@@ -103,6 +103,10 @@ Object.assign(PetSprite.prototype, {
     // 期间整窗保持可交互，否则光标移到输入框就会被 onMouseMove 翻回穿透、点击全被透传。
     this.chatClose = null;
     this.chatOpen = false;
+    // 待办面板：与对话弹窗同一套穿透守卫（面板同样是窗口内 DOM，而且比对话窗更大）。
+    // todoPanel 是面板句柄（占气泡槽，节点塞在 this.bubble 里），todoOpen 是穿透守卫标记。
+    this.todoPanel = null;
+    this.todoOpen = false;
   },
 
   /** 建 DOM 并把首帧位置落到窗口；布局数值全部来自上面算好的 geometry。 */
@@ -193,7 +197,7 @@ Object.assign(PetSprite.prototype, {
         // 切到其它应用后旧菜单不该继续占着透明窗口；丢失松手时也释放拖拽。
         this.closeMenu();
         if (this.dragState.active) this.onPointerUp();
-        if (!this.chatOpen) this.setInteractive(false);
+        if (!this.chatOpen && !this.todoOpen) this.setInteractive(false);
       },
       { signal: ac.signal },
     );
@@ -203,7 +207,7 @@ Object.assign(PetSprite.prototype, {
         // 光标离开窗口：菜单若开着立刻收起（窗口内 DOM，离开即不可达），再恢复穿透。
         // 拖拽中与对话弹窗开着都不恢复：前者会绕过 busy 并丢失 pointerup，后者要留光标回来点输入框。
         this.closeMenu();
-        if (!this.chatOpen && !this.dragState.active) this.setInteractive(false);
+        if (!this.chatOpen && !this.todoOpen && !this.dragState.active) this.setInteractive(false);
       },
       { signal: ac.signal },
     );

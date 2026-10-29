@@ -335,11 +335,22 @@ paths:
           本端点返回 `{ ok: false, reason: 'generate-error' }`。
         - 若该宠物条目开启了 `whisperImageEnabled` 且表情包池非空，
           会随机抽一张配图，随文本一起写进叶子的 `image` 字段。
+        - 带 `?image=` 时改为**只用指定那一张**：不受 `whisperImageEnabled` 门控（手动点图是显式意图），
+          名称不在池内则返回 `unknown-image`，**不会静默换成另一张**。
         - 模型选择：条目配置的 `whisperModel` 优先；留空则跟随当前对话的模型。
           指定模型生成失败时会**自动回落到当前对话的模型**重试一次。
       parameters:
         - $ref: "#/components/parameters/PetIdQuery"
         - $ref: "#/components/parameters/SurfaceQuery"
+        - name: image
+          in: query
+          required: false
+          description: |
+            指定本次使用的表情包名称（= 该宠物所属条目 `memes` 的键，不含扩展名）。
+            给了就只用这张；不在池内（名称写错，或图片文件已被删除）返回 `unknown-image`。
+            缺省 = 按 `whisperImageEnabled` 随机抽一张，或纯文本。
+          schema:
+            type: string
       responses:
         "200":
           description: |
@@ -349,7 +360,8 @@ paths:
             `reason` 取值：`provider-missing`（没有可用的模型——独立模式下恒为它）、
             `generate-error`（生成失败或 IO 失败，带 `message`）、`unknown-pet`（目标宠物在
             "校验那次读"与生成前那次读之间被删掉了——罕见，但如实报，**不会静默按 `main` 生成**，
-            也不会写下一只已不存在宠物的叶子）、`bad-request`（`surface` 缺省 / 非法）、
+            也不会写下一只已不存在宠物的叶子）、`unknown-image`（`?image=` 指定的名称不在池内）、
+            `bad-request`（`surface` 缺省 / 非法）、
             `pet-not-displayed`（带 `display`）。
           content:
             application/json:
@@ -1750,8 +1762,10 @@ paths:
 
         - **只白名单字段会被保留**：`pets[]` 的 `id`/`name`/`size`/`balanceEnabled`/
           `whisperEnabled`/`workStatusEnabled`/`fixedEnabled`/`display`/`position`，以及顶层
-          `notificationsEnabled`/`whisperImageEnabled`/`chatImageEnabled`/`confineToScreen`/
-          `physics`/`whisperModel`/`chatModel`/`chatMemoryRounds`/`chatImageLimit`。
+          `notificationsEnabled`/`clickSoundEnabled`/`whisperImageEnabled`/`chatImageEnabled`/
+          `confineToScreen`/`trayEnabled`/`voiceEnabled`/`voiceName`/`voiceWhisperEnabled`/
+          `voiceTodoEnabled`/`physics`/`font`/`whisperModel`/`chatModel`/`chatMemoryRounds`/
+          `chatImageLimit`。
           其余字段会沿用磁盘上用户文件里的原值（透传保留），所以设置页保存
           **不会抹掉**你手写的精调配置（`whisperPrompt`/`memes`/`eventsRefreshSec` 等）。
           白名单字段也只在请求体**真的传了**时才算白名单：没传就走透传，不会被抹成默认值。
@@ -2030,6 +2044,11 @@ paths:
                   animations:
                     type: string
                     description: 用户动画素材根目录绝对路径
+                  todos:
+                    type: string
+                    description: |
+                      待办数据文件绝对路径（`$DSH_HOME/dsh-pet/todos.json`）。
+                      一份用户级数据、不分宠物：清单正文、到期时间与完成状态都在这里，删掉等于清空待办。
                   logs:
                     type: string
                     description: |
@@ -2658,6 +2677,135 @@ paths:
         "405":
           description: 方法不允许（只接受 POST）
 
+  /dsh-pet-7340/todos:
+    get:
+      tags: [Action]
+      operationId: listTodos
+      summary: 读取待办清单
+      description: |
+        返回全部待办，已按「未完成在前、到期越近越靠前、无期限垫底、已完成最后」排序。
+        数据落在插件的用户目录（`<DSH_HOME>/dsh-pet/todos.json`），浏览器端与桌面端共用同一份。
+
+        **提醒由宿主定时器驱动，不依赖页面是否打开**：距到期越近提醒越密——
+        进入 7 天内开始提醒（24h → 12h → 4h → 1h → 20m → 5m 逐级变密），
+        逾期后 1 天内每 30 分钟、一周内每 6 小时，再久不再打扰。
+        一次提醒只由一只可见桌宠说出（网页端可见的优先），写进 `pets.<id>.say`。
+        没有端在线（没有挂着长轮询的请求）时整拍跳过，等有端连上再补上这次提醒。
+      responses:
+        "200":
+          description: 待办清单
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodoListResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+    post:
+      tags: [Action]
+      operationId: createTodo
+      summary: 新建一条待办
+      description: |
+        `text` 必填（trim 后 1–200 个码点）；`dueAt` 可选，epoch 毫秒或 `null`（无期限）。
+        没有期限的待办不会触发提醒，但仍会出现在清单里。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  maxLength: 200
+                  example: 交周报
+                dueAt:
+                  type: [integer, "null"]
+                  description: 到期时刻（epoch ms）；`null` / 不传 = 无期限
+                  example: 1793000000000
+      responses:
+        "200":
+          description: '新建结果；正文为空 / 超长或 `dueAt` 非法时回 `ok: false` + `bad-request`'
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/TodoResponse"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "400":
+          description: '请求体不是 JSON 对象：`400` + `{"ok":false,"reason":"invalid-json"}`'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureResponse"
+        "413":
+          description: '请求体超过 16 KiB：`413` + `{"ok":false,"reason":"payload-too-large"}`'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /dsh-pet-7340/todos/{id}:
+    patch:
+      tags: [Action]
+      operationId: updateTodo
+      summary: 修改一条待办
+      description: |
+        只写请求体里出现的字段，`text` / `dueAt` / `done` 至少要给一个（空对象回 `bad-request`）。
+        勾选完成会记 `completedAt`；**重新打开或改期限都会清空提醒排期**，按新状态重新计时。
+      parameters:
+        - $ref: "#/components/parameters/TodoIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+                  maxLength: 200
+                dueAt:
+                  type: [integer, "null"]
+                done:
+                  type: boolean
+      responses:
+        "200":
+          description: |
+            更新结果。id 不存在时回 `ok: false` + `todo-not-found`；字段非法回 `bad-request`。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/TodoResponse"
+                  - $ref: "#/components/schemas/FailureResponse"
+        "400":
+          description: '请求体不是 JSON 对象：`400` + `{"ok":false,"reason":"invalid-json"}`'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+    delete:
+      tags: [Action]
+      operationId: deleteTodo
+      summary: 删除一条待办
+      description: '幂等：id 不存在也回 `ok: true`，`removed: 0`。'
+      parameters:
+        - $ref: "#/components/parameters/TodoIdPath"
+      responses:
+        "200":
+          description: 删除结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodoRemovedResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
 components:
   parameters:
     PetIdQuery:
@@ -2738,6 +2886,15 @@ components:
         通知图标为 `<名>.png`。
       schema:
         type: string
+
+    TodoIdPath:
+      name: id
+      in: path
+      required: true
+      description: 待办 id（`GET /todos` 返回的 `todos[].id`）；只接受 URL 安全字符。
+      schema:
+        type: string
+      example: todo-mfh2k1-1
 
   responses:
     MethodNotAllowed:
@@ -3073,6 +3230,30 @@ components:
         monthlyCapUsd:
           type: number
           description: commandcode：月窗口满额度（USD）= 当期消耗 + 剩余额度；无额度也无消耗时缺省
+        usage:
+          type: object
+          description: |
+            windows：区间累计用量（本期累计），目前仅 commandcode 回传。
+            服务商给不出时整个字段缺省，气泡也就只有两页。
+            tokens 是毛值——接口不提供缓存命中拆分；requests 与 tokens 来自批量聚合，
+            可能比窗口百分比滞后数分钟。
+          required: [totalTokens, inputTokens, outputTokens, requests, spentUsd]
+          properties:
+            totalTokens:
+              type: integer
+              description: 区间总 token
+            inputTokens:
+              type: integer
+              description: 毛输入 token（含缓存命中部分，接口不给拆分）
+            outputTokens:
+              type: integer
+              description: 输出 token
+            requests:
+              type: integer
+              description: 区间请求数（含失败请求）
+            spentUsd:
+              type: number
+              description: 区间花费（USD）
         wallets:
           type: array
           description: |
@@ -3723,6 +3904,16 @@ components:
           type: boolean
         confineToScreen:
           type: boolean
+        voiceWhisperEnabled:
+          type: boolean
+          description: |
+            周期碎碎念要不要念出来（全局默认）。受 `voiceEnabled` 总开关约束：总开关关掉时本项不生效。
+            设置页「语音播报」卡里的「碎碎念播报」开关写的就是它。缺失默认 `false`。
+        voiceTodoEnabled:
+          type: boolean
+          description: |
+            待办提醒要不要念出来（全局默认）。同样受 `voiceEnabled` 总开关约束。
+            设置页「语音播报」卡里的「待办播报」开关写的就是它。缺失默认 `false`。
         chatMemoryRounds:
           type: integer
           minimum: 0
@@ -3809,3 +4000,63 @@ components:
               default: 300
               description: 周期碎碎念间隔
       additionalProperties: true
+
+    Todo:
+      type: object
+      required: [id, text, dueAt, done, createdAt, updatedAt, completedAt]
+      properties:
+        id:
+          type: string
+          description: 实例内唯一；PATCH / DELETE 的路径段
+        text:
+          type: string
+          description: 正文（trim 后 1–200 个码点）
+        dueAt:
+          type: [integer, "null"]
+          description: 到期时刻（epoch ms）；null = 无期限，永不提醒
+        done:
+          type: boolean
+        createdAt:
+          type: integer
+        updatedAt:
+          type: integer
+        completedAt:
+          type: [integer, "null"]
+        lastRemindedAt:
+          type: [integer, "null"]
+          description: 上次提醒时刻；内部字段，前端面板不消费
+
+    TodoListResponse:
+      type: object
+      required: [ok, todos]
+      properties:
+        ok:
+          type: boolean
+        todos:
+          type: array
+          items:
+            $ref: "#/components/schemas/Todo"
+
+    TodoResponse:
+      type: object
+      required: [ok, todo]
+      properties:
+        ok:
+          type: boolean
+        todo:
+          $ref: "#/components/schemas/Todo"
+        reason:
+          type: string
+          description: '失败原因（如 `bad-request` / `todo-not-found`）'
+        message:
+          type: string
+
+    TodoRemovedResponse:
+      type: object
+      required: [ok, removed]
+      properties:
+        ok:
+          type: boolean
+        removed:
+          type: integer
+          description: 删掉的条数；0 = 本来就没有（幂等）

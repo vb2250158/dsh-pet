@@ -235,25 +235,20 @@ Object.assign(PetSprite.prototype, {
   /**
    * 本窗口是否必须保持可交互（= 我正在用这个窗口的鼠标输入）。
    *
-   * 来源是拖拽中 / 右键菜单开着 / 对话弹窗开着（外加可点的余额气泡）：它们都靠窗口级鼠标事件驱动，
+   * 来源是拖拽中 / 右键菜单开着 / 对话或待办弹窗开着（外加可点的余额气泡）：它们都靠窗口级鼠标事件驱动，
    * 窗口一变回穿透输入链就断（拖拽定格、松手也没人报 pointerup）。
    * 这是渲染端专有的知识，主进程无从推断；同时上报控件矩形，菜单/聊天框外仍继续穿透。
    */
   inputBusy() {
     // 可点的余额气泡是第四个来源：它长在窗口里、靠窗口级 click 触发，却悬在平时穿透的余量区，
     // 正需要借 busy + 控件矩形把它圈出来。
-    return this.dragState.active || this.menuOpen || this.chatOpen || this.balanceClickable();
+    return this.dragState.active || this.menuOpen || this.chatOpen || this.todoOpen || this.balanceClickable();
   },
 
-  /** 余额气泡当前有几页：custom 取 views.length；内置 windows 是收起/展开两页；其余一页。 */
+  /** 余额气泡当前有几页：规则归共享层（与每页内容同源），这里只补「还没有结果」的兜底。 */
   balancePageCount() {
     const s = this.balanceState;
-    if (!s || !s.ok) return 1;
-    if (s.shape === 'custom') {
-      const views = S.customViews(s);
-      return views ? Math.max(1, views.length) : 1;
-    }
-    return s.shape === 'windows' ? 2 : 1;
+    return s ? S.balancePageCount(s) : 1;
   },
 
   /** 余额气泡此刻是否可点切页：页数多于 1 且气泡正在显示。 */
@@ -279,7 +274,9 @@ Object.assign(PetSprite.prototype, {
     if (!window.petBridge || !window.petBridge.setInputRegions) return;
     const rects = [];
     // 控件矩形 = 主进程允许接收点击的区域，矩形外继续穿透。可点的余额气泡悬在余量区，不登记就点不到。
-    const controls = [...document.querySelectorAll('.dsh-pet-menu-column, .dsh-pet-chat, .pet-bubble.is-clickable')];
+    const controls = [
+      ...document.querySelectorAll('.dsh-pet-menu-column, .dsh-pet-chat, .dsh-pet-todo, .pet-bubble.is-clickable'),
+    ];
     for (const el of this.inputRegionElements) {
       if (!controls.includes(el)) {
         this.inputRegionResize.unobserve(el);
@@ -329,8 +326,8 @@ Object.assign(PetSprite.prototype, {
       this.setInteractive(true);
       return;
     }
-    // 右键菜单/对话弹窗开启：整窗保持可交互，关闭后恢复命中区判定
-    if (this.menuOpen || this.chatOpen) {
+    // 右键菜单/对话弹窗/待办面板开启：整窗保持可交互，关闭后恢复命中区判定
+    if (this.menuOpen || this.chatOpen || this.todoOpen) {
       this.syncInputRegions(); // 级联菜单按悬停增减面板，及时更新占用区域
       this.setInteractive(true);
       this.setTip(false); // 菜单/弹窗期间提示让位，不跟浮层抢注意力
@@ -408,11 +405,17 @@ Object.assign(PetSprite.prototype, {
     this.showChatFromMenu(file);
   },
 
-  /** 悬停快捷键：光标在身体上时按 T 打开对话，等价于菜单里的「对话」。 */
+  /** 悬停快捷键：光标在身体上时按 T 开对话、按 D 开关待办。 */
   onHotkey(e) {
     if (!this.hoverBody) return;
-    if (!S.isChatHotkey(e)) return;
-    e.preventDefault();
-    this.showChatFromMenu();
+    if (S.isChatHotkey(e)) {
+      e.preventDefault();
+      this.showChatFromMenu();
+      return;
+    }
+    if (S.isTodoHotkey(e)) {
+      e.preventDefault();
+      this.toggleTodo();
+    }
   },
 });
