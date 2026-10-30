@@ -15,6 +15,8 @@ for (const [path, method] of [
   ['todos', 'POST'],
   ['%74odos/todo-1', 'PATCH'],
   ['todos/todo-1', 'DELETE'],
+  ['sleep?pet=fixture', 'POST'],
+  ['%77ake?pet=fixture', 'POST'],
 ]) {
   for (const rejection of [401, 403, undefined]) {
     test(`${method} ${path} admission ${rejection ?? 'accepted'} precedes dispatch`, async () => {

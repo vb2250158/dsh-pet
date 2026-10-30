@@ -9,6 +9,7 @@ import { defaultLog } from '../log-file.ts';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { CORNER_SET, isValidPetId, PET_DISPLAY_SET } from './constants.ts';
+import { isValidSizePercent } from '../../shared/pet-size.ts';
 import type { ConfigPaths } from './constants.ts';
 import { fontValid, modelSelectionValid, physicsValid, topFieldValid } from './validate.ts';
 
@@ -37,6 +38,10 @@ export function saveUserConfig(
     seenIds.add(id);
     const size = Number(pp.size);
     if (!Number.isFinite(size) || size <= 0) return null;
+    // 百分比大小（可选）：与读取侧同一份判定。传了就必须是不小于 1 的数字（不设上限），否则整包 400；
+    // 缺省表示不用百分比——这里不回填默认值，否则清空会变成「显式写回一个百分比」。
+    const sizePercent = pp.sizePercent;
+    if (sizePercent !== undefined && sizePercent !== null && !isValidSizePercent(sizePercent)) return null;
     // 显示名：可重复不校验唯一；缺失/留空/非字符串 → 按该宠物 id 处理（兼容旧配置）并告警
     let name = typeof pp.name === 'string' ? pp.name.trim() : '';
     if (!name) {
@@ -80,6 +85,7 @@ export function saveUserConfig(
       position: { corner, marginX, marginY },
     };
     if (persona) pet.whisperPrompt = persona;
+    if (sizePercent !== undefined && sizePercent !== null) pet.sizePercent = sizePercent;
     out.push(pet);
   }
   const ne = o.notificationsEnabled;
@@ -91,6 +97,9 @@ export function saveUserConfig(
   if (wie !== undefined && typeof wie !== 'boolean') return null;
   const cie = o.chatImageEnabled;
   if (cie !== undefined && typeof cie !== 'boolean') return null;
+  // 对话动作联动开关（全局布尔）：与上面几个开关同一套语义——传了必须是布尔，没传走透传保留
+  const cae = o.chatAnimationEnabled;
+  if (cae !== undefined && typeof cae !== 'boolean') return null;
   const cts = o.confineToScreen;
   if (cts !== undefined && typeof cts !== 'boolean') return null;
   // 语音播报开关与音色（全局）：与上面几个布尔同语义；音色必须落在白名单内，
@@ -145,6 +154,7 @@ export function saveUserConfig(
   if (cse !== undefined) outConfig.clickSoundEnabled = cse;
   if (wie !== undefined) outConfig.whisperImageEnabled = wie;
   if (cie !== undefined) outConfig.chatImageEnabled = cie;
+  if (cae !== undefined) outConfig.chatAnimationEnabled = cae;
   if (cts !== undefined) outConfig.confineToScreen = cts;
   if (ve !== undefined) outConfig.voiceEnabled = ve;
   if (vn !== undefined) outConfig.voiceName = vn;
@@ -167,6 +177,7 @@ export function saveUserConfig(
   if (cse !== undefined) bodyOwned.add('clickSoundEnabled');
   if (wie !== undefined) bodyOwned.add('whisperImageEnabled');
   if (cie !== undefined) bodyOwned.add('chatImageEnabled');
+  if (cae !== undefined) bodyOwned.add('chatAnimationEnabled');
   if (cts !== undefined) bodyOwned.add('confineToScreen');
   if (ve !== undefined) bodyOwned.add('voiceEnabled');
   if (vn !== undefined) bodyOwned.add('voiceName');

@@ -10,10 +10,17 @@ import { formatStamp } from './stamp.ts';
 import { tipAttrs } from './tooltip.ts';
 import type { ChatPanelState } from './types.ts';
 
-/** 语音播报按钮：贴在时间右边，三种状态一眼可分——可播 / 生成中转圈 / 播放中高亮。 */
+/** 语音播报按钮：贴在时间右边，四种状态一眼可分——可播 / 生成中转圈 / 播放中高亮 / 失败可重试。 */
 function speakNode(h: ChatPanelRuntime['h'], text: string, ts: number, state: ChatPanelState): unknown {
   const phase = state.speaking?.ts === ts ? state.speaking.phase : 'idle';
-  const label = phase === 'loading' ? '正在生成语音…' : phase === 'playing' ? '正在播放' : '播放这句';
+  const label =
+    phase === 'loading'
+      ? '正在生成语音…'
+      : phase === 'playing'
+        ? '正在播放'
+        : phase === 'failed'
+          ? '播放失败，点击重试'
+          : '播放这句';
   return h('button', {
     type: 'button',
     className: 'pet-chat-speak is-' + phase,
@@ -22,10 +29,36 @@ function speakNode(h: ChatPanelRuntime['h'], text: string, ts: number, state: Ch
     onClick: (event: { stopPropagation: () => void }) => {
       // 多选模式下整轮可点：这里必须拦一下，否则点喇叭会顺手切换选中
       event.stopPropagation();
-      if (phase === 'idle') state.speakRound(ts, text);
+      // 失败也允许再点一次：合成偶发失败时不必刷新面板
+      if (phase === 'idle' || phase === 'failed') state.speakRound(ts, text);
     },
-    // 生成中由 CSS 的 ::before 画转圈，按钮本身不放字符
-    children: phase === 'loading' ? null : '🔊',
+    // 生成中由 CSS 的 ::before 画转圈，按钮本身不放字符；失败换成静音喇叭
+    children: phase === 'loading' ? null : phase === 'failed' ? '🔇' : '🔊',
+  });
+}
+
+/**
+ * 动作播放按钮：这一轮回答演出过动作时，贴在喇叭右边，悬浮显示动作名，点一下重演。
+ *
+ * 悬浮气泡只显示动作名本身（不加「播放动作：」这类前缀）；读屏需要的语义放在 aria-label 上。
+ */
+function actionNode(h: ChatPanelRuntime['h'], action: string, state: ChatPanelState): unknown {
+  return h('button', {
+    type: 'button',
+    className: 'pet-chat-action',
+    'aria-label': '播放动作：' + action,
+    ...tipAttrs(action),
+    onClick: (event: { stopPropagation: () => void }) => {
+      // 多选模式下整轮可点：这里必须拦一下，否则点动作键会顺手切换选中
+      event.stopPropagation();
+      state.playAction(action);
+    },
+    children: h('svg', {
+      className: 'pet-chat-action-icon',
+      viewBox: '0 0 16 16',
+      'aria-hidden': 'true',
+      children: h('path', { d: 'M4.5 2.5v11l9-5.5z', fill: 'currentColor' }),
+    }),
   });
 }
 
@@ -195,6 +228,8 @@ export function roundNode(
                   formatStamp(round.ts, Date.now()),
                   // 只有回答那句能点播：用户自己的话没有语音
                   round.assistant === undefined ? null : speakNode(h, round.assistant.text, round.ts, state),
+                  // 动作键贴在喇叭右边：这一轮没演动作时整块不出现
+                  round.assistant?.action === undefined ? null : actionNode(h, round.assistant.action, state),
                 ],
               })
             : null,

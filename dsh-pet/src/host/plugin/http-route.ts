@@ -6,7 +6,7 @@
  * @module dsh-pet/src/host/plugin/http-route
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { ROUTE_PATH } from '../../shared/constants.ts';
+import { ROUTE_SEGMENT } from '../../shared/constants.ts';
 import { readBody, sendFile, sendJson, sendText, type RouteResult } from '../http.ts';
 import { failureBody } from '../routes/result.ts';
 import { createPetRouter } from '../routes/index.ts';
@@ -41,7 +41,7 @@ export function createHttpRoute(deps: PetRouteDeps): { handlePetRoute: HttpRoute
     signal?: AbortSignal,
   ): Promise<RouteResult> => {
     const url = new URL(rawUrl, 'http://localhost');
-    const rest = decodeURIComponent(url.pathname.slice(ROUTE_PATH.length + 1));
+    const rest = decodeURIComponent(url.pathname.slice(ROUTE_SEGMENT.length + 1));
     const run = (): Promise<RouteResult> => dispatchPetRoute(url, rest, method, body, signal);
     // 写配置的三条路径（PUT/POST /config、POST /pet-display、POST /pet-config）都是「读当前配置
     // → 白名单重建整段 pets → 写盘」，并发交错会互相覆盖，必须共用一条串行队列；
@@ -74,7 +74,7 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
     () =>
       ctx.webServer.register({
         kind: 'prefix',
-        path: ROUTE_PATH,
+        path: ROUTE_SEGMENT,
         handler: async (req: IncomingMessage, res: ServerResponse) => {
           // 挂起等待（/playback?wait=）期间调用方可能提前断开：据此中止等待，
           // 否则那个等待者要一直留到超时才回收。'close' 在正常应答后也会触发，但那时监听已摘掉。
@@ -83,11 +83,18 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
           res.on('close', onClose);
           try {
             const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
-            const privatePath = decodeURIComponent(pathname).slice(ROUTE_PATH.length);
+            const privatePath = decodeURIComponent(pathname).slice(ROUTE_SEGMENT.length);
             if (
-              ['/attachment', '/voice/voices', '/voice/speak', '/chat', '/chat/memory', '/todos'].includes(
-                privatePath,
-              ) ||
+              [
+                '/attachment',
+                '/voice/voices',
+                '/voice/speak',
+                '/chat',
+                '/chat/memory',
+                '/todos',
+                '/sleep',
+                '/wake',
+              ].includes(privatePath) ||
               privatePath.startsWith('/todos/')
             ) {
               // 私有对话、图片、语音与待办统一要求宿主认证及 Host/Origin 检查。
@@ -127,6 +134,6 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
           }
         },
       }),
-    'dsh-pet: /dsh-pet-7340 asset route',
+    `dsh-pet: ${ROUTE_SEGMENT} asset route`,
   );
 }
