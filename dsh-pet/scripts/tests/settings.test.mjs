@@ -31,6 +31,7 @@ const defaults = {
       throwPower: 1,
       ceilingBounce: false,
       petCollision: false,
+      hapticEnabled: true,
     },
     whisperModel: { provider: '', model: '' },
     chatModel: { provider: '', model: '' },
@@ -49,7 +50,14 @@ const customized = {
     chatImageLimit: 2,
     whisperModel: { provider: 'test', model: 'model' },
     chatModel: { provider: 'test', model: 'model' },
-    physics: { ...defaults.main.physics, gravity: 1200, throwPower: 2, ceilingBounce: true, petCollision: true },
+    physics: {
+      ...defaults.main.physics,
+      gravity: 1200,
+      throwPower: 2,
+      ceilingBounce: true,
+      petCollision: true,
+      hapticEnabled: false,
+    },
   },
 };
 let browser, server, url;
