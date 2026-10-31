@@ -21,6 +21,7 @@ function mainBeforeReady(
   const switches: string[] = [];
   const paths: Array<{ name: string; path: string }> = [];
   const directories: string[] = [];
+  const appPaths = new Map<string, string>();
   const ready = new Error('Electron ready reached');
   const env = {
     DSH_PET_FORCE_DSF: '0',
@@ -32,8 +33,11 @@ function mainBeforeReady(
       appendSwitch: (name: string) => switches.push(name),
     },
     setName: () => {},
-    setPath: (name: string, path: string) => paths.push({ name, path }),
-    getPath: () => 'C:/default-app-data',
+    setPath: (name: string, path: string) => {
+      paths.push({ name, path });
+      appPaths.set(name, path);
+    },
+    getPath: (name: string) => appPaths.get(name) ?? 'C:/default-app-data',
     setAppUserModelId: () => {},
     disableHardwareAcceleration: () => {},
     whenReady: () => {
@@ -56,6 +60,8 @@ function mainBeforeReady(
       if (name === 'electron') return { app };
       if (name === 'node:fs')
         return {
+          writeFileSync: () => {},
+          unlinkSync: () => {},
           mkdirSync: (path: string) => {
             if (directoryError) throw directoryError;
             directories.push(path);
@@ -132,7 +138,7 @@ test('explicit helper user data is isolated before ordinary, app and DPI-probe s
   for (const extra of variants) {
     const result = mainBeforeReady('win32', undefined, { ...extra, DSH_PET_USER_DATA_DIR: directory });
     assert.deepEqual(result.paths, [{ name: 'userData', path: directory }]);
-    assert.deepEqual(result.directories, [directory]);
+    assert.deepEqual(result.directories, [directory, directory]);
     assert.equal(result.switches.includes('disable-gpu-sandbox'), false);
   }
 });
@@ -149,7 +155,7 @@ test('relative or empty user-data overrides fail instead of using the default pr
 test('ordinary helper startup keeps its existing default profile when no override is set', () => {
   const result = mainBeforeReady('win32');
   assert.deepEqual(result.paths, []);
-  assert.deepEqual(result.directories, []);
+  assert.deepEqual(result.directories, ['C:/default-app-data']);
 });
 
 test('an unavailable explicit profile directory fails without reaching the default profile', () => {

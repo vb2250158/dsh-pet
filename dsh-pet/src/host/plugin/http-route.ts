@@ -89,6 +89,7 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
                 '/attachment',
                 '/voice/voices',
                 '/voice/speak',
+                '/voice/hear',
                 '/chat',
                 '/chat/memory',
                 '/todos',

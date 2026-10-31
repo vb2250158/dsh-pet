@@ -22,6 +22,18 @@ export const es: Record<Key, string> = {
   'cmd.chat': 'Chat',
   'cmd.pet': 'Mascota',
   'cmd.balance': 'Saldo',
+  'shortcut.open': 'Abrir el chat de la mascota',
+  'shortcut.chat': 'Abrir la ventana de chat',
+  'shortcut.hear': 'Entrada de voz',
+  shortcutCardTitle: 'Atajos',
+  shortcutCardHint: 'La primera tecla solo actúa con el puntero sobre la mascota; las de Ctrl son globales.',
+  shortcutRowChat: 'Abrir chat',
+  shortcutRowHear: 'Entrada de voz',
+  shortcutRowTodo: 'Tareas',
+  shortcutRowSleep: 'Dormir / despertar',
+  shortcutRowSidebar: 'Abrir el chat lateral',
+  shortcutNoteDesktop:
+    'Los atajos globales no se aplican a la ventana del escritorio; se cambian en Ajustes → General → Atajos.',
   petsLabel: 'Mascotas',
   add: 'Agregar mascota',
   remove: 'Eliminar',
@@ -146,15 +158,18 @@ export const es: Record<Key, string> = {
   physicsTitle: 'Física (sensación al arrastrar y lanzar)',
   physicsHint:
     'Valor predeterminado global, compartido por todas las mascotas (un pet pack puede sobrescribirlo en el archivo de su propio tipo); se escribe en la configuración del usuario al "Guardar" (nunca al instante). En el navegador se aplica al instante; en el escritorio se aplica cuando Guardar recarga las ventanas de mascotas.',
-  'physics.gravity': 'Gravedad (gravity)',
+  mobileTitle: 'Efectos móviles',
+  mobileHint:
+    'Solo tienen sentido en el navegador del móvil: la vibración necesita motor, los dos interruptores de movimiento necesitan sensores de inclinación/aceleración, y los sensores exigen HTTPS o localhost.',
+  'physics.gravity': 'Gravedad',
   'physics.gravityHint': 'px/s²: cuanto mayor, más rápido cae; 0 = sin gravedad (vuela en línea recta para siempre)',
-  'physics.restitution': 'Rebote (restitution)',
+  'physics.restitution': 'Rebote',
   'physics.restitutionHint':
     '0–1, velocidad que se conserva al rebotar en una pared o el suelo (1 = completamente elástico, 0 = se detiene en seco)',
-  'physics.groundFriction': 'Fricción con el suelo (groundFriction)',
+  'physics.groundFriction': 'Fricción de contacto',
   'physics.groundFrictionHint':
-    'por segundo, amortiguación horizontal mientras está en el suelo; 0 = hielo sin fricción',
-  'physics.throwPower': 'Fuerza de lanzamiento (throwPower)',
+    'por segundo, amortiguación a lo largo de cualquier superficie (pared, suelo, techo); 0 = hielo en todas',
+  'physics.throwPower': 'Fuerza de lanzamiento',
   'physics.throwPowerHint':
     '> 0, multiplicador general del seguimiento con resorte y de la velocidad de salida (1 = predeterminado; más alto = sigue más pegado y lanza más fuerte)',
   physicsCeilingBounce: 'Rebote en el techo',
@@ -165,6 +180,12 @@ export const es: Record<Key, string> = {
   physicsHaptic: 'Vibración al chocar',
   physicsHapticHint:
     'Una vibración por impacto (paredes, suelo, techo, otras mascotas). Funciona en Chrome/Edge; no en iOS ni en navegadores WebView como Via. El modo No molestar la bloquea.',
+  physicsTilt: 'Gravedad por inclinación',
+  physicsTiltHint:
+    'Inclina el móvil y la gravedad lo sigue (magnitud = el valor de arriba); con gravedad en 0 la inclinación no hace nada. Requiere HTTPS/localhost.',
+  physicsShake: 'Agitar para lanzar',
+  physicsShakeHint:
+    'Agita para lanzar la mascota en la dirección del gesto; la fuerza escala con throwPower. No depende de la gravedad, así que funciona con gravedad 0. Requiere HTTPS/localhost.',
   invalidPhysics:
     'Revisa los parámetros de física: gravedad / fricción con el suelo ≥ 0, rebote 0–1, fuerza de lanzamiento > 0.',
   fontTitle: 'Apariencia y fuente',
@@ -188,7 +209,7 @@ export const es: Record<Key, string> = {
   'font.simsun': 'SimSun',
   'font.comic': 'Comic Sans MS',
   'font.system': 'Predeterminada del sistema',
-  modelTitle: 'Modelos de IA y contexto del chat',
+  modelTitle: 'Chat y modelos',
   modelHint:
     'Qué modelo usa cada uno de susurros y chat, y cuánto historial lleva cada solicitud de chat. "Seguir la conversación actual" usa el modelo de tu conversación actual (predeterminado). Valor predeterminado global: se aplica a todas las mascotas y un pet pack puede sobrescribirlo en el archivo de su propio tipo. Las opciones vienen de la misma fuente que el selector de modelos de DSH y el host las sirve en vivo.',
   modelFollow: 'Seguir la conversación actual',

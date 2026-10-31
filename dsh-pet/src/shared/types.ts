@@ -163,14 +163,21 @@ export interface PhysicsParams {
   gravity: number;
   /** 碰壁反弹恢复系数 0~1（1 = 完全弹性，0 = 撞上即停；墙与地共用） */
   restitution: number;
-  /** 地面水平摩擦（/s）：落地时水平速度的衰减率，0 = 无摩擦 */
+  /** 接触面切向摩擦（/s）：撞墙、落地、撞顶后沿接触面方向的速度衰减率，0 = 四面都像冰面 */
   groundFriction: number;
   /** 顶部是否反弹：false = 顶部无边界，抛掷可飞出屏幕顶部（重力仍会拉回落） */
   ceilingBounce: boolean;
   /** 总力度（拖拽与抛掷的输出增益）：弹簧 K/C、甩抛初速与软上限整体 ×p（1.0 = 现状，必须 > 0） */
   throwPower: number;
-  /** 多宠物互相碰撞开关：true = 飞行中的宠物撞到其它宠物时按动量守恒弹开；false = 互相穿过（默认） */
+  /** 多宠物互相碰撞开关：true = 飞行中的宠物撞到其它宠物时按动量守恒弹开；false（fork 默认）= 互相穿过 */
   petCollision: boolean;
+  /** 倾斜控制重力：true = 手机倾斜方向代替固定向下的重力方向（大小仍由 gravity 决定，竖直时取满值；
+   *  gravity 为 0 时倾斜没有可用的量，等同关闭）；false（默认）= 重力恒竖直向下。
+   *  仅浏览器半侧生效，且传感器只在安全上下文（HTTPS / localhost）可用；缺键按 false。 */
+  tiltGravity?: boolean;
+  /** 摇一摇抛出：true = 摇一摇沿甩动方向把宠物甩出去（力度 = 基准 × throwPower），与重力大小无关，
+   *  所以 gravity 为 0 时也能用；false（默认）= 不读加速度计。同样只在安全上下文可用。缺键按 false。 */
+  shakeThrow?: boolean;
   /** 碰撞触觉反馈：true（默认）时撞墙 / 落地 / 撞顶与宠物互撞各震一下。
    *  仅浏览器半侧生效，且要求环境有 Vibration API——iOS 与桌面端没有，静默跳过。
    *  缺省按 true；旧配置里没有这个键也算开。 */

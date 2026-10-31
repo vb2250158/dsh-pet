@@ -9,6 +9,8 @@ for (const [path, method] of [
   ['%61ttachment?id=sha256:fixture', 'GET'],
   ['voice/voices', 'GET'],
   ['voice/speak', 'GET'],
+  ['voice/hear', 'POST'],
+  ['%76oice/hear', 'POST'],
   ['chat', 'GET'],
   ['chat/memory', 'GET'],
   ['todos', 'GET'],

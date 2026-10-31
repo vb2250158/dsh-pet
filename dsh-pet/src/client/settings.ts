@@ -19,7 +19,8 @@ import { type DialogState, makeDialog } from './settings/dialog.ts';
 import { makeFontCard } from './settings/font-card.ts';
 import { makeGlobalCard, type GlobalFlagKey, type GlobalFlags } from './settings/global-card.ts';
 import { makeLoadStatus } from './settings/load-status.ts';
-import { makeModelCard, type ModelFieldKey } from './settings/model-card.ts';
+import { makeModelCard, type ChatFlagKey, type ChatFlagValues, type ModelFieldKey } from './settings/model-card.ts';
+import { makeMobileCard } from './settings/mobile-card.ts';
 import { makeModelPicker } from './settings/picker/index.ts';
 import { makeVoicePicker } from './settings/picker/voice-picker.ts';
 import { runNotificationTest } from './settings/notify-test.ts';
@@ -29,6 +30,7 @@ import { makePetCard } from './settings/pet-card.ts';
 import { makePetTabs } from './settings/pet-tabs.ts';
 import { createWriteFlow } from './settings/config/index.ts';
 import { makePhysicsCard } from './settings/physics-card.ts';
+import { makeShortcutsCard } from './settings/shortcuts-card.ts';
 import { attachTipLayer } from './settings/tip-layer.ts';
 import type { SettingsRuntime } from './settings/runtime.ts';
 import { useConfigLoad } from './settings/config/index.ts';
@@ -69,6 +71,8 @@ export function makePetConfigSection(rt: SettingsRuntime): FunctionComponent<{ c
   const FontCard = makeFontCard(rt);
   const ModelCard = makeModelCard(rt, ModelPicker);
   const PhysicsCard = makePhysicsCard(rt);
+  const ShortcutsCard = makeShortcutsCard(rt);
+  const MobileCard = makeMobileCard(rt);
   const Actions = makeActions(rt);
   const { ConfigMetaCard, StorageCard } = makePathsCards(rt);
   const SettingsDialog = makeDialog(rt);
@@ -125,8 +129,8 @@ export function makePetConfigSection(rt: SettingsRuntime): FunctionComponent<{ c
     // 不做即时写入：PUT /config 会重启桌面 Helper，全部桌面宠物窗口重建（拖拽落点清空、宠物跳回角落）。
     // 引擎重读放在保存成功后（persist 里调 reloadNotifications），保存后即时生效、无需刷新。
     const [notifyEnabled, setNotifyEnabled] = useState(true);
-    // 点击音效开关：同通知开关，随「保存」整包写入；初值 false 是内置默认，加载效应会用成品值覆盖。
-    const [clickSound, setClickSound] = useState(false);
+    // 点击音效开关：同通知开关，随「保存」整包写入；初值 true 是内置默认，加载效应会用成品值覆盖。
+    const [clickSound, setClickSound] = useState(true);
     // 表情包配图开关（全局）：切换只改本地状态，随「保存」一起提交。
     const [whisperImage, setWhisperImage] = useState(false);
     const [chatImage, setChatImage] = useState(false);
@@ -204,28 +208,32 @@ export function makePetConfigSection(rt: SettingsRuntime): FunctionComponent<{ c
     // 文件宠物条目数：只用于标题提示「另 n 只来自 pet/ 目录」。
     const packCount = kinds.filter((item) => item.kind === 'pack').length;
 
-    // 七个全局开关的当前值：卡片只认这个对象，键名与成品配置字段同名。
+    // 七个顶层开关的当前值：卡片各认自己那几项，键名与成品配置字段同名。
     const globalFlags: GlobalFlags = {
       notificationsEnabled: notifyEnabled,
       clickSoundEnabled: clickSound,
-      whisperImageEnabled: whisperImage,
-      chatImageEnabled: chatImage,
-      chatAnimationEnabled: chatAnimation,
       confineToScreen: confineScreen,
       trayEnabled,
     };
+    const chatFlags: ChatFlagValues = {
+      whisperImageEnabled: whisperImage,
+      chatImageEnabled: chatImage,
+      chatAnimationEnabled: chatAnimation,
+    };
 
     // 通知开关要借用户手势申请权限，其余六个是纯 setState；统一成「键名 → setter」的查表，避免长 switch。
-    const globalSetters: Record<GlobalFlagKey, (value: boolean) => void> = {
+    // 两束开关共用这张表：键名到 setter 的映射只写一遍，卡片只管回传键名。
+    const flagSetters: Record<GlobalFlagKey | ChatFlagKey, (value: boolean) => void> = {
       notificationsEnabled: (value) => void toggleNotify(value),
       clickSoundEnabled: setClickSound,
+      confineToScreen: setConfineScreen,
+      trayEnabled: setTrayEnabled,
       whisperImageEnabled: setWhisperImage,
       chatImageEnabled: setChatImage,
       chatAnimationEnabled: setChatAnimation,
-      confineToScreen: setConfineScreen,
-      trayEnabled: setTrayEnabled,
     };
-    const setGlobalFlag = (key: GlobalFlagKey, value: boolean): void => globalSetters[key](value);
+    const setGlobalFlag = (key: GlobalFlagKey, value: boolean): void => flagSetters[key](value);
+    const setChatFlag = (key: ChatFlagKey, value: boolean): void => flagSetters[key](value);
 
     /** 局部补丁写入：字体与物理参数都是「整段对象 + 改几个字段」。 */
     const patchFont = (patch: Partial<FontConfig>): void => setFont((current) => ({ ...current, ...patch }));
@@ -348,8 +356,11 @@ export function makePetConfigSection(rt: SettingsRuntime): FunctionComponent<{ c
           chatImageLimit,
           onChatMemoryChange: setChatMemory,
           onChatImageLimitChange: setChatImageLimit,
+          values: chatFlags,
+          onFlagChange: setChatFlag,
         }),
         h(PhysicsCard, { busy, physics, onChange: patchPhysics }),
+        h(MobileCard, { busy, physics, onChange: patchPhysics }),
         h(Actions, {
           busy,
           msg,
@@ -358,6 +369,9 @@ export function makePetConfigSection(rt: SettingsRuntime): FunctionComponent<{ c
           onSync: write.requestSync,
           onTestNotification: testNotification,
         }),
+
+        // 保存按钮以下是参考类卡片：只读说明，改不改都不用点保存。
+        h(ShortcutsCard, {}),
 
         // 落盘位置两张卡都靠 meta，读不到就整块不出现。
         paths ? h(ConfigMetaCard, { paths }) : null,

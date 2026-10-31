@@ -20,6 +20,18 @@ export const en: Record<Key, string> = {
   'cmd.chat': 'Chat',
   'cmd.pet': 'Pet',
   'cmd.balance': 'Balance',
+  'shortcut.open': 'Open pet chat',
+  'shortcut.chat': 'Open chat bubble',
+  'shortcut.hear': 'Voice input',
+  shortcutCardTitle: 'Shortcuts',
+  shortcutCardHint: 'The first key needs the pointer over the pet; keys with Ctrl are global.',
+  shortcutRowChat: 'Open chat',
+  shortcutRowHear: 'Voice input',
+  shortcutRowTodo: 'Todo list',
+  shortcutRowSleep: 'Sleep / wake',
+  shortcutRowSidebar: 'Open sidebar chat',
+  shortcutNoteDesktop:
+    'Global shortcuts do not apply to the desktop pet window; rebind them in Settings → General → Shortcuts.',
   petsLabel: 'Pets',
   add: 'Add pet',
   remove: 'Remove',
@@ -142,13 +154,17 @@ export const en: Record<Key, string> = {
   physicsTitle: 'Physics (drag & throw feel)',
   physicsHint:
     'Global default, shared by every pet (a pet pack may override it in its own kind file); written to the user config on "Save" (never written immediately). Applies instantly in the browser; on the desktop it applies once Save reloads the pet windows.',
+  mobileTitle: 'Mobile effects',
+  mobileHint:
+    'Only meaningful in a phone browser: haptics needs a vibration motor, the two motion switches need tilt / accelerometer sensors, and sensors require HTTPS or localhost.',
   'physics.gravity': 'Gravity',
   'physics.gravityHint': 'px/s² — the higher, the faster it falls; 0 = weightless (flies straight forever)',
   'physics.restitution': 'Bounciness',
   'physics.restitutionHint':
     '0–1, speed kept when bouncing off a wall or the floor (1 = perfectly elastic, 0 = stops dead)',
-  'physics.groundFriction': 'Ground friction',
-  'physics.groundFrictionHint': 'per second, horizontal damping while on the ground; 0 = frictionless ice',
+  'physics.groundFriction': 'Contact friction',
+  'physics.groundFrictionHint':
+    'per second, damping along any surface hit (wall, floor, ceiling); 0 = frictionless ice everywhere',
   'physics.throwPower': 'Throw power',
   'physics.throwPowerHint':
     '> 0, overall multiplier for spring tracking and release speed (1 = default; higher = tighter tracking, harder throws)',
@@ -160,6 +176,12 @@ export const en: Record<Key, string> = {
   physicsHaptic: 'Collision haptics',
   physicsHapticHint:
     'One buzz per hit (walls, floor, ceiling, other pets). Works in Chrome/Edge; not on iOS or WebView shells like Via. Do Not Disturb blocks it.',
+  physicsTilt: 'Tilt gravity',
+  physicsTiltHint:
+    'Tilt the phone and gravity follows it (magnitude = the gravity value above); with gravity at 0 tilt has no effect. Requires HTTPS/localhost.',
+  physicsShake: 'Shake to throw',
+  physicsShakeHint:
+    'Shake to fling the pet along the shake direction; strength scales with throwPower. Independent of gravity, so it still works at gravity 0. Requires HTTPS/localhost.',
   invalidPhysics: 'Check the physics values: gravity / ground friction ≥ 0, bounciness 0–1, throw power > 0.',
   fontTitle: 'Appearance & font',
   fontHint:
@@ -182,7 +204,7 @@ export const en: Record<Key, string> = {
   'font.simsun': 'SimSun',
   'font.comic': 'Comic Sans MS',
   'font.system': 'System default',
-  modelTitle: 'AI models & chat context',
+  modelTitle: 'Chat & models',
   modelHint:
     'Which model each of whisper and chat uses, and how much history every chat request carries. "Follow current conversation" uses the model your current conversation is on (default). Global default: applies to every pet, and a pet pack may override it in its own kind file. The options come from the same source as the DSH model picker, served live by the host.',
   modelFollow: 'Follow current conversation',

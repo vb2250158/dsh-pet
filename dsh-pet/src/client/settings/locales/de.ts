@@ -20,6 +20,18 @@ export const de: Record<Key, string> = {
   'cmd.chat': 'Chat',
   'cmd.pet': 'Pet',
   'cmd.balance': 'Guthaben',
+  'shortcut.open': 'Pet-Chat öffnen',
+  'shortcut.chat': 'Chatfenster öffnen',
+  'shortcut.hear': 'Spracheingabe',
+  shortcutCardTitle: 'Tastenkürzel',
+  shortcutCardHint: 'Die erste Taste wirkt nur mit dem Zeiger auf dem Pet; Tasten mit Ctrl sind global.',
+  shortcutRowChat: 'Chat öffnen',
+  shortcutRowHear: 'Spracheingabe',
+  shortcutRowTodo: 'Aufgaben',
+  shortcutRowSleep: 'Schlafen / Aufwachen',
+  shortcutRowSidebar: 'Seitenleisten-Chat öffnen',
+  shortcutNoteDesktop:
+    'Globale Kürzel gelten nicht im Desktop-Fenster; änderbar unter Einstellungen → Allgemein → Tastenkürzel.',
   petsLabel: 'Pet-Liste',
   add: 'Pet hinzufügen',
   remove: 'Entfernen',
@@ -143,23 +155,33 @@ export const de: Record<Key, string> = {
   physicsTitle: 'Physik (Zieh- und Wurfgefühl)',
   physicsHint:
     'Globaler Standard für alle Pets (ein Pet-Pack kann ihn in seiner Art-Datei überschreiben); wird beim „Speichern" in die Benutzerkonfiguration geschrieben (kein sofortiges Schreiben). Im Browser sofort wirksam, im Desktop-Modus, sobald das Speichern die Pet-Fenster neu lädt.',
-  'physics.gravity': 'Schwerkraft (gravity)',
+  mobileTitle: 'Mobil-Effekte',
+  mobileHint:
+    'Nur im Handy-Browser sinnvoll: Vibration braucht einen Motor, die beiden Bewegungs-Schalter brauchen Neigungs-/Beschleunigungssensoren, und Sensoren gibt es nur über HTTPS oder localhost.',
+  'physics.gravity': 'Schwerkraft',
   'physics.gravityHint': 'px/s², größer = fällt schneller; 0 = schwerelos (fliegt geradeaus weiter)',
-  'physics.restitution': 'Elastizität (restitution)',
+  'physics.restitution': 'Elastizität',
   'physics.restitutionHint':
     '0–1, Geschwindigkeitsanteil beim Abprallen von Wand/Boden (1 = voll elastisch, 0 = bleibt sofort stehen)',
-  'physics.groundFriction': 'Bodenreibung (groundFriction)',
-  'physics.groundFrictionHint': '/s, Abklingen der horizontalen Geschwindigkeit am Boden; 0 = eisglatt, keine Bremse',
-  'physics.throwPower': 'Wurfkraft (throwPower)',
+  'physics.groundFriction': 'Kontaktreibung',
+  'physics.groundFrictionHint':
+    '/s, Abklingen der Geschwindigkeit entlang jeder Kontaktfläche (Wand, Boden, Decke); 0 = überall eisglatt',
+  'physics.throwPower': 'Wurfkraft',
   'physics.throwPowerHint':
     '> 0, Gesamtfaktor für Federfolge und Abwurfgeschwindigkeit (1 = Standard; höher = folgt enger, wirft härter)',
-  physicsCeilingBounce: 'Deckenabprall (ceilingBounce)',
+  physicsCeilingBounce: 'Deckenabprall',
   physicsCeilingBounceHint: 'Aus: Würfe können oben aus dem Bildschirm fliegen (die Schwerkraft holt sie zurück)',
-  physicsPetCollision: 'Pet-Kollisionen (petCollision)',
+  physicsPetCollision: 'Pet-Kollisionen',
   physicsPetCollisionHint: 'Ein fliegendes Pet prallt mit Impulserhaltung von anderen ab (Masse ∝ Größe²)',
   physicsHaptic: 'Kollisions-Vibration',
   physicsHapticHint:
     'Ein Impuls pro Treffer (Wand, Boden, Decke, andere Pets). Funktioniert in Chrome/Edge; nicht auf iOS oder in WebView-Hüllen wie Via. „Nicht stören“ blockiert die Vibration.',
+  physicsTilt: 'Schwerkraft per Neigung',
+  physicsTiltHint:
+    'Handy neigen: die Schwerkraft folgt der Neigung (Betrag = der Wert oben). Bei Schwerkraft 0 bewirkt Neigen nichts. Benötigt HTTPS/localhost.',
+  physicsShake: 'Schütteln zum Werfen',
+  physicsShakeHint:
+    'Schütteln schleudert den Pet in Wurfrichtung; die Stärke folgt throwPower. Unabhängig von der Schwerkraft, funktioniert also auch bei 0. Benötigt HTTPS/localhost.',
   invalidPhysics: 'Bitte Physikwerte prüfen: Schwerkraft / Bodenreibung ≥ 0, Elastizität 0–1, Wurfkraft > 0.',
   fontTitle: 'Aussehen & Schrift',
   fontHint:
@@ -182,7 +204,7 @@ export const de: Record<Key, string> = {
   'font.simsun': 'SimSun',
   'font.comic': 'Comic Sans MS',
   'font.system': 'Systemstandard',
-  modelTitle: 'KI-Modelle & Chat-Kontext',
+  modelTitle: 'Chat & Modelle',
   modelHint:
     'Welches Modell Flüstern und Chat jeweils nutzen und wie viel Verlauf jeder Chat-Aufruf mitführt. „Aktueller Konversation folgen" = das Modell, das Ihre aktuelle Konversation verwendet (Standard). Globaler Standard: gilt für alle Pets, ein Pet-Pack kann ihn in seiner Art-Datei überschreiben. Die Optionen stammen aus derselben Quelle wie die Modellauswahl von DSH und werden vom Host live geliefert.',
   modelFollow: 'Aktueller Konversation folgen',

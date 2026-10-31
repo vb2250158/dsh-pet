@@ -192,9 +192,9 @@ Object.assign(PetSprite.prototype, {
   // image 给了就只用这张（「配图」菜单点的是具体某张）：不在池内宿主回 unknown-image，本端只记日志。
   showWhisperFromMenu(image) {
     // surface 必填：本窗口就是桌面端
-    // 桌面窗口是 file://，语音接口得走 bridge 绝对地址；标记归本端，周期碎碎念没有标记所以不播。
+    // 桌面窗口是 file://，语音接口得走 bridge 绝对地址；念不念由 say.voiceTo 决定，
+    // 本端身份在启动时已经 S.setSurface('desktop') 登记过。
     S.setVoiceBase(BASE);
-    S.markVoicePending();
     // 图名是配置里的中文键，必须编码（可能含空格与全角字符）
     const pic = image ? '&image=' + encodeURIComponent(image) : '';
     S.postAction(WHISPER_URL + '?pet=' + encodeURIComponent(this.pet.id) + '&surface=desktop' + pic)
@@ -212,12 +212,12 @@ Object.assign(PetSprite.prototype, {
   // 弹窗跟随身体命中区 this.hit（桌宠在视频中间，视频框右上角 ≠ 宠物右上角），超出视口自动夹回；
   // 弹窗是窗口内 DOM，期间整窗保持可交互，关闭后恢复命中区穿透。
   showChatFromMenu(image) {
-    if (this.chatClose) {
-      this.chatClose();
-      this.chatClose = null;
+    if (this.chatMount) {
+      this.chatMount.close();
+      this.chatMount = null;
       return; // 已开着：先关旧的
     }
-    // 语音接口同样走 bridge 地址；对话的待播标记由 shared/chat/send 在发送时打
+    // 语音接口同样走 bridge 地址；念不念由 say.voiceTo 决定（本端身份启动时已 setSurface('desktop')）
     S.setVoiceBase(BASE);
     const m = S.mountChatDialog({
       petId: this.pet.id,
@@ -251,18 +251,29 @@ Object.assign(PetSprite.prototype, {
         console.info('[dsh-pet] 对话已发送 pet=' + this.pet.id);
       },
       onClose: () => {
-        this.chatClose = null;
+        this.chatMount = null;
         this.chatOpen = false;
         window.__dshPetDebug.chatOpen = false;
         this.syncInputBusy(); // 弹窗关：交还常规判定（菜单还开着的话仍保持忙）
         if (!this.menuOpen) this.setInteractive(false); // 无菜单时恢复命中区穿透
       },
     });
-    this.chatClose = m.close;
+    this.chatMount = m;
     this.chatOpen = true; // 穿透守卫：弹窗期间整窗保持可交互
     window.__dshPetDebug.chatOpen = true;
     this.syncInputBusy();
     this.setInteractive(true);
+  },
+
+  // 快捷键「按住 M 说话」的两端：按下时若没有弹窗就先开一个，再让它开录；松开只收尾、不关窗，
+  // 识别结果落进输入框等用户确认（不自动发送）。
+  startHearChat() {
+    if (!this.chatMount) this.showChatFromMenu();
+    if (this.chatMount) this.chatMount.startHear();
+  },
+
+  stopHearChat() {
+    if (this.chatMount) this.chatMount.stopHear();
   },
 
   // 待办面板开关：面板占气泡槽（优先级最高），期间整窗保持可交互，关闭后交还命中区穿透。

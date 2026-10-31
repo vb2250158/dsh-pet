@@ -32,6 +32,8 @@ const defaults = {
       ceilingBounce: false,
       petCollision: false,
       hapticEnabled: true,
+      tiltGravity: false,
+      shakeThrow: false,
     },
     whisperModel: { provider: '', model: '' },
     chatModel: { provider: '', model: '' },

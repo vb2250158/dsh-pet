@@ -109,6 +109,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 | 接口                             | 功能                                                                         |
 | -------------------------------- | ---------------------------------------------------------------------------- |
 | `POST /dsh-pet-7340/voice/speak` | 合成并返回 mp3：`{ text, voice?, rate? }`；同一输入命中缓存，队列最多排 3 个 |
+| `POST /dsh-pet-7340/voice/hear`  | 识别音频回文字：`{ audio }`，16kHz/单声道/PCM16 WAV 的 base64                |
 | `GET /dsh-pet-7340/voice/voices` | 可用音色列表；前端拿它渲染选择器，不要硬编码 id                              |
 
 ## 十、待办事项
@@ -171,3 +172,5 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 - [`openapi.yaml`](openapi.yaml) —— 完整契约（OpenAPI 3.1，可直接导入 Swagger UI / Postman）
 - [`tools/api-tester.html`](tools/api-tester.html) —— 桌宠控制台：扮演第三方消费方的示例页面，
   可直观试用上述接口（用 `node tools/api-tester.cjs` 启动，它会带上本地代理解决跨域）
+
+语音识别在调用方取消或 30 秒预算到期时停止等待，即使第三方实现忽略 AbortSignal；取消前已结束的识别不会保留计时器或取消监听。DSH_PET_USER_DATA_DIR 显式目录不可写时报告原始错误，不把用户切换到其它 profile。此 fork 保留点击音效和宠物互撞默认关闭，已有配置仍按原值生效。
