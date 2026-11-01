@@ -147,6 +147,36 @@ describe('TodoStore —— 排序与并发', () => {
     assert.equal(new Set(created.map((item) => item.id)).size, 20);
     assert.equal((await makeStore().list()).length, 20);
   });
+
+  test('同一时刻重建存储实例后，新记录与已持久化记录的 id 不重复', async () => {
+    const first = await makeStore().create({ text: '第一次启动', dueAt: null });
+    const second = await makeStore().create({ text: '同一时刻再次启动', dueAt: null });
+    assert.notEqual(first.id, second.id);
+    assert.deepEqual(new Set((await makeStore().list()).map((item) => item.id)), new Set([first.id, second.id]));
+  });
+
+  test('时钟回拨再回到旧时间后，重建实例仍能创建唯一 id 并重载', async () => {
+    const originalClock = clock;
+    const first = await makeStore().create({ text: '旧时间', dueAt: null });
+    clock -= 1000;
+    const second = await makeStore().create({ text: '回拨之后', dueAt: null });
+    clock = originalClock;
+    const third = await makeStore().create({ text: '回到旧时间', dueAt: null });
+    assert.equal(new Set([first.id, second.id, third.id]).size, 3);
+    assert.equal((await makeStore().list()).length, 3);
+  });
+
+  test('新建记录保留已有时间戳式 id，重载后两种 id 均可按原值更新', async () => {
+    const legacyId = `todo-${clock.toString(36)}-1`;
+    const legacy = { id: legacyId, text: '已有记录', dueAt: null, done: false, createdAt: clock, updatedAt: clock };
+    writeFileSync(file, JSON.stringify({ version: TODO_FILE_VERSION, todos: [legacy] }), 'utf8');
+    const created = await makeStore().create({ text: '新建记录', dueAt: null });
+    assert.notEqual(created.id, legacyId);
+    const reloaded = makeStore();
+    assert.equal((await reloaded.update(legacyId, { done: true }))?.id, legacyId);
+    assert.equal((await reloaded.update(created.id, { done: true }))?.id, created.id);
+    assert.equal((await makeStore().list()).length, 2);
+  });
 });
 
 describe('TodoStore —— 原文件保护', () => {

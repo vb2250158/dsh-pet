@@ -7,6 +7,7 @@
  * @module dsh-pet/src/host/todo/store
  */
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { cloneTodo, parseTodoFile, sortTodos, TODO_FILE_VERSION, type TodoFile, type TodoRecord } from './types.ts';
 import type { LoggerLike } from '../log-file.ts';
@@ -44,8 +45,6 @@ export class TodoStore {
   declare private queue: Promise<void>;
   /** 磁盘内容的进程内副本；null = 还没读过。 */
   declare private cached: TodoRecord[] | null;
-  /** 同一毫秒内建多条时的序号。 */
-  declare private seq: number;
 
   constructor(options: TodoStoreOptions) {
     this.file = options.file;
@@ -53,7 +52,6 @@ export class TodoStore {
     this.now = options.now ?? (() => Date.now());
     this.queue = Promise.resolve();
     this.cached = null;
-    this.seq = 0;
   }
 
   /** 全部待办（排序后的副本）。 */
@@ -67,7 +65,7 @@ export class TodoStore {
   /**
    * 新建一条。
    *
-   * id 由时间戳 + 进程内序号生成：重启后时间戳不同，旧 id 不会撞。
+   * id 使用独立随机标识；系统时间回拨或存储实例重建不会重用旧标识。
    *
    * @param input - 已校验的正文与到期时刻。
    * @returns 落盘成功后的记录副本。
@@ -76,9 +74,8 @@ export class TodoStore {
     return this.run(async () => {
       await this.ensureLoaded();
       const at = this.now();
-      this.seq += 1;
       const todo: TodoRecord = {
-        id: `todo-${at.toString(36)}-${this.seq.toString(36)}`,
+        id: `todo-${randomUUID()}`,
         text: input.text,
         dueAt: input.dueAt,
         done: false,

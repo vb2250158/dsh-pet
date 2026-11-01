@@ -1,5 +1,7 @@
 # dsh-pet 🐾
 
+`0.3.8-fork.15` 修复待办在存储实例重建或系统时间回拨后的标识冲突，保留已有标识及文件格式。更新记录见 [CHANGELOG.md](CHANGELOG.md)。
+
 `0.3.8-fork.8` requires Host browser/API authentication and Host/Origin admission for Session-image reads, and retains the explicit isolated Electron profile from fork.7.
 
 `0.3.8-fork.8` 为会话图片读取增加宿主浏览器/API 认证和 Host/Origin 检查，并保留 fork.7 的显式 Electron 隔离目录。
