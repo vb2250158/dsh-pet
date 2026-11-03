@@ -1,5 +1,9 @@
 # dsh-pet 🐾
 
+公开维护 fork：<https://github.com/vb2250158/dsh-pet>，上游：<https://github.com/PC2005-cloud/dsh-pet>。`0.4.1-fork.2` 将插件图标改为透明背景，保留人物与文字；代码沿用 MIT 许可，素材继续遵守上游署名及禁止商用要求。
+
+Public maintenance fork: <https://github.com/vb2250158/dsh-pet>, based on <https://github.com/PC2005-cloud/dsh-pet>. Version `0.4.1-fork.2` removes the plugin icon background while retaining the character and lettering. Code remains MIT licensed; upstream asset attribution and noncommercial restrictions still apply.
+
 `0.4.1-fork.1` 合入上游设置与对话页、宠物头像、工作会话跳转、显示快捷键和语音改进，保留宿主认证、字体、Electron 数据隔离及待办标识保护。更新记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 `0.4.1-fork.1` integrates upstream settings, chat, avatar, Session focus, display shortcuts and speech updates while retaining Host admission, typography, Electron profile isolation and durable todo identities.

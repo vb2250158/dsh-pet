@@ -1,3 +1,9 @@
+## 0.4.1-fork.2
+
+- 插件图标移除白色背景，保留人物与文字，使用 256×256 透明 PNG。
+- 更正安装包 README 的过期“私有维护版”说明，补充公开 fork 与上游链接，保留原有代码许可及素材使用要求。
+- Remove the plugin icon background and identify the public maintenance fork in the packaged README. Code licensing and upstream asset restrictions remain unchanged.
+
 ## 0.4.1-fork.1
 
 - 合入上游 `3229ab2` 前的 31 个提交：独立模式设置与对话页、宠物头像、工作会话跳转、显示快捷键、语音音量与气泡同步、碎碎念排队及应用资源修复。
