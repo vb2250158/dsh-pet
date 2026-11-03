@@ -6,7 +6,14 @@
  * @module dsh-pet/src/client/chat/state
  */
 import { speakText } from '../../shared/voice.ts';
-import { fetchHistory, groupRounds, playAction as requestPlayAction } from './api.ts';
+import {
+  fetchHistory,
+  groupRounds,
+  memoryBoundaryIndex,
+  MEMORY_LINE_ATTR,
+  playAction as requestPlayAction,
+  roundsToRevealMemory,
+} from './api.ts';
 import { createHistoryActions, createSendActions, createShellActions } from './actions.ts';
 import { createChatEffects } from './effects.ts';
 import type { ChatPanelRuntime } from './runtime.ts';
@@ -35,6 +42,7 @@ const INITIAL: PanelData = {
   personas: {},
   personaOpen: false,
   speaking: null,
+  avatarVersion: 0,
 };
 
 /**
@@ -48,7 +56,8 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
   const useChatEffects = createChatEffects(rt);
 
   return function usePetChatState(): ChatPanelState {
-    const [data, setData] = useState<PanelData>(INITIAL);
+    // 版本号在面板挂载时生成：每次打开面板都重新挂载，换过头像后重开一定拿到新图。
+    const [data, setData] = useState<PanelData>({ ...INITIAL, avatarVersion: Date.now() });
     const listRef = useRef<HTMLDivElement | null>(null);
     const draftRef = useRef<HTMLTextAreaElement | null>(null);
     /** 已贴到底的那条消息（`ts`）：只有它变化时才自动滚到底。 */
@@ -75,6 +84,10 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
     const pet = data.pets.find((one) => one.id === data.petId);
     const allRounds = groupRounds(data.messages);
     const rounds = allRounds.slice(-data.visibleRounds);
+    const memoryRounds = data.roundsByEntry[pet?.assetRoot ?? ''];
+
+    /** 分界线元素：只有它落在当前窗口里才存在。 */
+    const findMemoryLine = (el: HTMLElement): Element | null => el.querySelector('[' + MEMORY_LINE_ATTR + ']');
 
     return {
       ...data,
@@ -85,7 +98,23 @@ export function createPetChatState(rt: ChatPanelRuntime): () => ChatPanelState {
       hasOlder: allRounds.length > rounds.length,
       petName: pet?.name || '宠',
       assetRoot: pet?.assetRoot ?? '',
-      memoryRounds: data.roundsByEntry[pet?.assetRoot ?? ''],
+      memoryRounds,
+      hasMemoryLine: memoryBoundaryIndex(allRounds.length, memoryRounds) !== null,
+      jumpToMemory: () => {
+        const el = listRef.current;
+        if (el === null) return;
+        const line = findMemoryLine(el);
+        if (line !== null) {
+          line.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          return;
+        }
+        // 线还在「加载更早」没放出来的那段：先把窗口撑到能看见它，下一帧再滚
+        if (memoryRounds === undefined || memoryBoundaryIndex(allRounds.length, memoryRounds) === null) return;
+        patch({ visibleRounds: Math.max(data.visibleRounds, roundsToRevealMemory(memoryRounds)) });
+        requestAnimationFrame(() => {
+          findMemoryLine(el)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        });
+      },
       persona: data.personas[data.petId] ?? '',
       togglePersona: () => patch({ personaOpen: !data.personaOpen }),
       closePersona: () => patch({ personaOpen: false }),

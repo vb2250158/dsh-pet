@@ -8,6 +8,13 @@ export const ja: Record<Key, string> = {
   intro: '複数のペットを管理できます。ペットごとにサイズと位置を個別に設定できます（保存するとすぐに反映されます）。',
   // 卡片标题与卡片级说明；说明统一进问号气泡。
   petCardTitle: 'ペットの設定',
+  avatarLabel: 'アバター',
+  avatarHint:
+    'チャットパネルでこのペットの発言の横に表示される小さな画像です。未アップロードならプラグインの既定画像が使われます。アップロードはすぐ反映され、以前の画像を上書きします（「保存」を押す必要はありません）。',
+  avatarUpload: 'アバターをアップロード',
+  avatarChange: '変更',
+  avatarUploading: 'アップロード中…',
+  avatarUploaded: 'アバターを更新しました',
   petCardHint:
     'ペットごとに個別設定します：名前 / サイズ / 表示位置 / 位置 / オフセット / 4つの機能スイッチ。設定後、最下部の「保存」をクリックするとすぐに反映されます。',
   globalTitle: 'グローバルスイッチ',
@@ -23,15 +30,24 @@ export const ja: Record<Key, string> = {
   'shortcut.open': 'ペット会話を開く',
   'shortcut.chat': '会話ウィンドウを開く',
   'shortcut.hear': '音声入力',
+  'shortcut.capture': 'スクリーンショットを会話へ',
   shortcutCardTitle: 'ショートカット',
-  shortcutCardHint: '前のキーはポインタをペットに合わせた時だけ効きます。Ctrl 付きはグローバルです。',
+  shortcutCardHint: '開くと 2 グループに分かれます：ペットのショートカットとグローバルショートカット。',
   shortcutRowChat: '会話を開く',
+  shortcutRowHold: '押して話す',
   shortcutRowHear: '音声入力',
+  shortcutRowCapture: 'スクリーンショット',
+  shortcutRowPaste: '画像を貼り付け',
   shortcutRowTodo: 'ToDo',
   shortcutRowSleep: '寝る / 起きる',
+  shortcutRowDisplay: '表示位置',
   shortcutRowSidebar: 'サイドバーの会話を開く',
-  shortcutNoteDesktop:
-    'グローバルショートカットはデスクトップペットのウィンドウでは効きません。設定 → 一般 → ショートカットで変更できます。',
+  shortcutGroupPet: 'ペットのショートカット',
+  shortcutGroupPetHint:
+    'Web はポインタをペットに合わせるだけ。デスクトップペットのウィンドウは、先にペットをクリックしてキーボードフォーカスを移してください。',
+  shortcutGroupGlobal: 'グローバルショートカット',
+  shortcutGroupGlobalHint:
+    'Web とデスクトップ版のウィンドウでは DSH が振り分けます。設定 → 一般 → ショートカットで変更できます。',
   petsLabel: 'ペット一覧',
   add: 'ペットを追加',
   remove: '削除',
@@ -150,6 +166,9 @@ export const ja: Record<Key, string> = {
   voiceTodoEnabledHint:
     '期限が来た ToDo リマインダーを読み上げます（同じ文言でバブルも表示され、この項目は読み上げるかどうかだけを決めます）。上のマスタースイッチに従います。デフォルトはオフです。',
   voiceNameLabel: '声質',
+  voiceVolumeLabel: '音量',
+  voiceVolumeHint:
+    '読み上げの音量（0〜1 の小数）。1 が最大音量（100%）、0 は消音です。変わるのは再生の大きさだけで、音声の再合成は行いません。上の総スイッチとは別の設定で、総スイッチが切のときは効果がありません。',
   physicsTitle: '物理（ドラッグ＆投げの感触）',
   physicsHint:
     'グローバルデフォルトで、すべてのペットに共通です（pet pack は自身の種類ファイルで個別に上書きできます）。「保存」時にユーザー設定へ書き込まれます（即時書き込みはしません）。ブラウザでは保存後すぐに反映され、デスクトップでは保存でペットウィンドウが再読み込みされてから反映されます。',

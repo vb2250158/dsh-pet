@@ -95,10 +95,12 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
                 '/todos',
                 '/sleep',
                 '/wake',
+                '/pet-avatar',
+                '/focus-session',
               ].includes(privatePath) ||
               privatePath.startsWith('/todos/')
             ) {
-              // 私有对话、图片、语音与待办统一要求宿主认证及 Host/Origin 检查。
+              // 私有对话、图片、语音、待办、头像写入与会话跳转统一要求宿主认证及 Host/Origin 检查。
               // Standalone mode consumes the same domain handlers through its private bridge.
               const rejection =
                 typeof ctx.connection.requestRejection === 'function' ? ctx.connection.requestRejection(req) : 401;

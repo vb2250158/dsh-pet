@@ -19,6 +19,10 @@ for (const [path, method] of [
   ['todos/todo-1', 'DELETE'],
   ['sleep?pet=fixture', 'POST'],
   ['%77ake?pet=fixture', 'POST'],
+  ['pet-avatar?root=fixture', 'POST'],
+  ['%70et-avatar?root=fixture', 'POST'],
+  ['focus-session', 'POST'],
+  ['%66ocus-session', 'POST'],
 ]) {
   for (const rejection of [401, 403, undefined]) {
     test(`${method} ${path} admission ${rejection ?? 'accepted'} precedes dispatch`, async () => {

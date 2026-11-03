@@ -242,9 +242,16 @@ Object.assign(PetSprite.prototype, {
    * 这是渲染端专有的知识，主进程无从推断；同时上报控件矩形，菜单/聊天框外仍继续穿透。
    */
   inputBusy() {
-    // 可点的余额气泡是第四个来源：它长在窗口里、靠窗口级 click 触发，却悬在平时穿透的余量区，
-    // 正需要借 busy + 控件矩形把它圈出来。
-    return this.dragState.active || this.menuOpen || this.chatOpen || this.todoOpen || this.balanceClickable();
+    // 可点的气泡（余额翻页、工作气泡跳会话）同样是来源：它们长在窗口里、靠窗口级 click 触发，
+    // 却悬在平时穿透的余量区，正需要借 busy + 控件矩形把它们圈出来。
+    return (
+      this.dragState.active ||
+      this.menuOpen ||
+      this.chatOpen ||
+      this.todoOpen ||
+      this.balanceClickable() ||
+      this.workClickable()
+    );
   },
 
   /** 余额气泡当前有几页：规则归共享层（与每页内容同源），这里只补「还没有结果」的兜底。 */
@@ -257,6 +264,11 @@ Object.assign(PetSprite.prototype, {
   balanceClickable() {
     if (!this.bubbleOn || this.balanceWrap) return false;
     return this.balancePageCount() > 1;
+  },
+
+  /** 工作气泡此刻是否可点：它正占着气泡槽，且拿到了可跳转的会话。 */
+  workClickable() {
+    return this.bubbleSlot === 'work' && !!this.workSessionId;
   },
 
   /**
@@ -425,7 +437,7 @@ Object.assign(PetSprite.prototype, {
     this.showChatFromMenu(file);
   },
 
-  /** 悬停快捷键：按住 M 说话、L 开对话、D 开关待办、S 切换睡/醒。 */
+  /** 悬停快捷键：按住 M 说话、L 开对话、S 截图、Z 切换睡/醒、D 开关待办、1-4 切显示位置。 */
   onHotkey(e) {
     // 按住说话先判：它要吃掉按住期间的自动重复，晚一步就会被输入框收走
     if (this.hearHold.onKeyDown(e)) {
@@ -433,9 +445,20 @@ Object.assign(PetSprite.prototype, {
       return;
     }
     if (!this.hoverBody) return;
+    const display = S.displayOfHotkey(e);
+    if (display) {
+      e.preventDefault();
+      this.setPetDisplay(display);
+      return;
+    }
     if (S.isChatHotkey(e)) {
       e.preventDefault();
       this.showChatFromMenu();
+      return;
+    }
+    if (S.isCaptureHotkey(e)) {
+      e.preventDefault();
+      this.screenshotFromShortcut();
       return;
     }
     if (S.isTodoHotkey(e)) {

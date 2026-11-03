@@ -84,7 +84,9 @@ before(async () => {
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   url = `http://127.0.0.1:${server.address().port}`;
-  browser = await chromium.launch();
+  browser = await chromium.launch(
+    process.env.DSH_PET_TEST_BROWSER_CHANNEL ? { channel: process.env.DSH_PET_TEST_BROWSER_CHANNEL } : {},
+  );
 });
 after(async () => {
   await browser?.close();
@@ -97,8 +99,12 @@ async function open(t, { get = customized, put, post, viewport = { width: 900, h
   const page = await context.newPage();
   page.setDefaultTimeout(5000);
   const writes = [],
-    errors = [];
+    errors = [],
+    consoleDiagnostics = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleDiagnostics.push(message.text());
+  });
   t.after(() => assert.deepEqual(errors, []));
   await page.route('**/dsh-pet-7340/**', async (route) => {
     const request = route.request();
@@ -126,7 +132,13 @@ async function open(t, { get = customized, put, post, viewport = { width: 900, h
     });
   });
   await page.goto(`${url}/?lang=${lang}`);
-  await page.locator('.dsh-pet-cfg').waitFor();
+  try {
+    await page.locator('.dsh-pet-cfg').waitFor();
+  } catch (error) {
+    throw new Error(`Settings fixture did not mount: ${[...errors, ...consoleDiagnostics].join('; ')}`, {
+      cause: error,
+    });
+  }
   return { page, writes };
 }
 

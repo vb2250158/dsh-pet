@@ -39,6 +39,8 @@ export interface PanelData {
   readonly personaOpen: boolean;
   /** 正在点播的那一轮与阶段；null = 没有在播。同一时刻只播一条。 */
   readonly speaking: { readonly ts: number; readonly phase: 'loading' | 'playing' | 'failed' } | null;
+  /** 头像地址的破缓存版本号：打开面板与刷新时换一个，浏览器才会重新取图（换过头像后尤其需要）。 */
+  readonly avatarVersion: number;
 }
 
 /** 需要二次确认的破坏性操作：用面板内的确认条，不用浏览器原生 `confirm`。 */
@@ -56,6 +58,12 @@ export interface ChatPanelState extends PanelData {
   readonly assetRoot: string;
   /** 当前条目保留的轮数（`chatMemoryRounds`）；配置里没有时不画记忆边界线。 */
   readonly memoryRounds: number | undefined;
+  /** 历史确实多于记忆轮数、画得出那条线；为假时「记忆线」按钮置灰。 */
+  readonly hasMemoryLine: boolean;
+  /** 滚到记忆分界线；线还在未放出的更早分页里时先把它放出来。 */
+  readonly jumpToMemory: () => void;
+  /** 重读配置与历史（改完对话配置不必刷新整个页面）。 */
+  readonly refresh: () => void;
   /** 当前这只宠物实际在用的人设正文；空串 = 实例与条目都没写。 */
   readonly persona: string;
   /** 展开 / 收起人设卷帘。 */

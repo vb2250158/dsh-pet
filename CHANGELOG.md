@@ -1,3 +1,10 @@
+## 0.4.1-fork.1
+
+- 合入上游 `3229ab2` 前的 31 个提交：独立模式设置与对话页、宠物头像、工作会话跳转、显示快捷键、语音音量与气泡同步、碎碎念排队及应用资源修复。
+- 保留宿主认证、会话图片与语音权限、字体与可读气泡、默认关闭点击音效与互撞、显式 Electron 数据隔离和待办随机标识；头像写入与会话跳转在分发前同样检查宿主认证。
+- 上游设置页刷新 cookie 与本地请求准入状态并存。完整 `--no-sandbox` 重试仅在显式设置 `DSH_PET_ALLOW_NO_SANDBOX=1` 后启用；默认保留沙箱，`DSH_PET_GPU_SANDBOX=1` 继续禁止降级。
+- Integrates 31 upstream commits through `3229ab2`, retaining fork typography, storage, identity and Host admission. Avatar writes and Session focus require admission before dispatch. Full sandbox fallback requires explicit `DSH_PET_ALLOW_NO_SANDBOX=1`; GPU-only settings do not grant that permission.
+
 ## 0.3.8-fork.15
 
 - 待办标识改用随机 UUID，避免重建存储实例或系统时间回拨后生成重复标识、导致文件无法重新读取；保留已有标识和文件格式。

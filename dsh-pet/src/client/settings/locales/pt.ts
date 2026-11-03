@@ -8,6 +8,13 @@ export const pt: Record<Key, string> = {
   intro: 'Gerencie vários pets: cada um tem tamanho e posição próprios (aplicado na hora após salvar).',
   // 卡片标题与卡片级说明；说明统一进问号气泡。
   petCardTitle: 'Pet',
+  avatarLabel: 'Avatar',
+  avatarHint:
+    'A imagem pequena exibida ao lado das mensagens deste pet no painel de conversa. Sem envio, usa-se o logotipo padrão do plugin; o envio vale na hora e substitui o anterior, sem clicar em "Salvar".',
+  avatarUpload: 'Enviar avatar',
+  avatarChange: 'Trocar',
+  avatarUploading: 'Enviando…',
+  avatarUploaded: 'Avatar atualizado',
   petCardHint:
     'Ajustes por pet: nome / tamanho / exibição / posição / deslocamentos / os quatro interruptores. Clique em "Salvar" no fim para aplicar na hora.',
   globalTitle: 'Interruptores globais',
@@ -23,15 +30,24 @@ export const pt: Record<Key, string> = {
   'shortcut.open': 'Abrir o chat do pet',
   'shortcut.chat': 'Abrir a janela de chat',
   'shortcut.hear': 'Entrada de voz',
+  'shortcut.capture': 'Captura de tela para o chat',
   shortcutCardTitle: 'Atalhos',
-  shortcutCardHint: 'A primeira tecla só vale com o ponteiro sobre o pet; as com Ctrl são globais.',
+  shortcutCardHint: 'Ao expandir há dois grupos: atalhos do pet e atalhos globais.',
   shortcutRowChat: 'Abrir chat',
+  shortcutRowHold: 'Segurar para falar',
   shortcutRowHear: 'Entrada de voz',
+  shortcutRowCapture: 'Captura de tela',
+  shortcutRowPaste: 'Colar imagem',
   shortcutRowTodo: 'Tarefas',
   shortcutRowSleep: 'Dormir / acordar',
+  shortcutRowDisplay: 'Posição de exibição',
   shortcutRowSidebar: 'Abrir chat lateral',
-  shortcutNoteDesktop:
-    'Os atalhos globais não valem para a janela do desktop; podem ser alterados em Configurações → Geral → Atalhos.',
+  shortcutGroupPet: 'Atalhos do pet',
+  shortcutGroupPetHint:
+    'Na web basta passar o ponteiro sobre o pet. Na janela do desktop, clique no pet primeiro para ele receber o foco do teclado.',
+  shortcutGroupGlobal: 'Atalhos globais',
+  shortcutGroupGlobalHint:
+    'São distribuídos pelo DSH na web e na janela do desktop; mudam em Configurações → Geral → Atalhos.',
   petsLabel: 'Pets',
   add: 'Adicionar pet',
   remove: 'Remover',
@@ -152,6 +168,9 @@ export const pt: Record<Key, string> = {
   voiceTodoEnabledHint:
     'Fala o lembrete quando uma tarefa vence (o balão continua aparecendo; isto só decide se fala). Dependente do interruptor mestre acima. Desligado por padrão.',
   voiceNameLabel: 'Voz',
+  voiceVolumeLabel: 'Volume',
+  voiceVolumeHint:
+    'Volume de reprodução em decimal 0–1: 1 é o volume máximo (100%) e 0 silencia. Altera apenas a intensidade e não sintetiza o áudio de novo, então ajustá-lo não custa nada extra. É independente do interruptor geral acima: com ele desligado, não tem efeito.',
   physicsTitle: 'Física (sensação de arrastar e arremessar)',
   physicsHint:
     'Padrão global, compartilhado por todos os pets (um pet pack pode sobrescrever no arquivo do próprio tipo); gravado na configuração do usuário ao "Salvar" (nunca na hora). No navegador vale na hora; no desktop vale quando o "Salvar" recarrega as janelas do pet.',

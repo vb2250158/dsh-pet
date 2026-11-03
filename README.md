@@ -1,6 +1,12 @@
 # dsh-pet 🐾
 
-`0.3.8-fork.15` 修复待办在存储实例重建或系统时间回拨后的标识冲突，保留已有标识及文件格式。更新记录见 [CHANGELOG.md](CHANGELOG.md)。
+`0.4.1-fork.1` 合入上游设置与对话页、宠物头像、工作会话跳转、显示快捷键和语音改进，保留宿主认证、字体、Electron 数据隔离及待办标识保护。更新记录见 [CHANGELOG.md](CHANGELOG.md)。
+
+`0.4.1-fork.1` integrates upstream settings, chat, avatar, Session focus, display shortcuts and speech updates while retaining Host admission, typography, Electron profile isolation and durable todo identities.
+
+默认保留 Chromium 沙箱。仅在已确认沙箱初始化故障且接受完整关闭沙箱的情况下，设置 `DSH_PET_ALLOW_NO_SANDBOX=1` 允许特定秒退后重试一次；`DSH_PET_GPU_SANDBOX=1` 仍禁止降级，GPU 专用开关本身不授权关闭完整沙箱。设置页测试可用 `DSH_PET_TEST_BROWSER_CHANNEL=msedge` 选择本机已安装的 Edge。
+
+Chromium sandboxing remains enabled by default. Set `DSH_PET_ALLOW_NO_SANDBOX=1` only to permit one full-sandbox fallback after a diagnosed initialization failure; `DSH_PET_GPU_SANDBOX=1` still prevents it. The GPU-only switch does not grant full-sandbox permission. Settings tests can select an installed Edge with `DSH_PET_TEST_BROWSER_CHANNEL=msedge`.
 
 `0.3.8-fork.8` requires Host browser/API authentication and Host/Origin admission for Session-image reads, and retains the explicit isolated Electron profile from fork.7.
 
@@ -34,6 +40,7 @@ This maintenance fork integrates upstream changes while keeping the DSH font as 
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm version" src="https://img.shields.io/npm/v/dsh-pet?label=npm&color=blue"></a>
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="npm monthly downloads" src="https://img.shields.io/npm/dm/dsh-pet?label=%E6%9C%88%E4%B8%8B%E8%BD%BD&color=brightgreen"></a>
   <a href="https://www.npmjs.com/package/dsh-pet"><img alt="total downloads" src="https://img.shields.io/npm/dt/dsh-pet?label=%E6%80%BB%E4%B8%8B%E8%BD%BD&color=success"></a>
+  <a href="https://github.com/PC2005-cloud/dsh-pet/releases"><img alt="release downloads" src="https://img.shields.io/github/downloads/PC2005-cloud/dsh-pet/total?label=Release%20%E4%B8%8B%E8%BD%BD&color=5C6BC0"></a>
   <a href="https://github.com/PC2005-cloud/dsh-pet"><img alt="stars" src="https://img.shields.io/github/stars/PC2005-cloud/dsh-pet?style=social"></a>
   <a href="https://github.com/PC2005-cloud/dsh-pet/blob/main/LICENSE"><img alt="license" src="https://img.shields.io/github/license/PC2005-cloud/dsh-pet?color=orange"></a>
   <a href="https://awesome-dsh-plugin.com"><img alt="awesome dsh plugin" src="https://awesome-dsh-plugin.com/badge.svg"></a>
@@ -85,7 +92,9 @@ dsh plugin --profile web add --save-exact github:vb2250158/dsh-pet#<40位提交>
 - **多开与种类**：同时养多只，各自大小与位置；也能自定义宠物种类（pet pack），一类一套动画与素材。
 - **三种运行形态**：DSH web 的浏览器 overlay、DSH 桌面应用的透明置顶窗、完全不依赖 DSH 的独立模式。
 - **交互与物理**：点击回应、拖拽甩抛、双击弹弓、宠物互撞，同一套物理与 Q 弹挤压手感，参数可调。
+- **手机与触屏**：触屏直接拖拽甩抛，与鼠标共用同一套物理与挤压手感；手机浏览器上还能倾斜手机改变重力方向、摇一摇把宠物甩出去、碰撞时震动反馈——三项可在设置页「移动端效果」里分别关闭。传感器只在 HTTPS 或 localhost 下可用（iOS 还需点一次授权），iOS 与桌面端没有振动 API，会自动跳过。
 - **碎碎念与对话**：按周期自动说一句，也能随时聊；记忆持久化、可配图、可念出来。
+- **语音（说与听）**：对话回复与手动碎碎念会念出来，音色、音量与总开关可配；按住对话窗的话筒说一句，录音转成文字直接填进输入框。
 - **余额展示**：内置常见服务商的余额 / 额度查询，按剩余额度分档播动画并弹气泡；也可以登记自己的服务商。
 - **工作状态联动**：跟随 DSH 会话状态切档位动画，并在头顶常驻一句话。
 - **待办事项**：一句话加可选到期时间，清单挂在宠物头顶；越临近到期提醒越密，由宠物说出来。
