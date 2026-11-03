@@ -91,7 +91,7 @@ test('Windows visible show/restore/resume repair native demotion; hidden, destro
       win.emit(event);
       assert.equal(win.nativeTop, true, event);
       assert.equal(win.pins.length, pinsBefore + 1, 'one repin per lifecycle event');
-      assert.equal(win.pins.at(-1), true);
+      assert.equal(win.pins[win.pins.length - 1], true);
     }
     win.nativeTop = false;
     owner.keepOffTaskbar(win); // Same entry used by resume/unlock/display sync.

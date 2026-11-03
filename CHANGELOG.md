@@ -1,3 +1,9 @@
+## 0.4.1-fork.4
+
+- 合入上游 `31aa345` 的六项更新：输入法回车、历史动作与配图名称、用户侧历史时间前缀、拖拽位移和动作频率设置及全局继承；保留 fork 的认证、沙箱、数据路径、字体、图标与 Windows 层级恢复。
+- 补充模型请求历史回归，确认动作与配图名称只投影一次、旧用户附件不重发、持久记忆不被改写；修正配置文档的动作频率继承说明。
+- Integrates six upstream changes through `31aa345`, preserving fork admission, sandbox defaults, data paths, typography, artwork and Windows stacking recovery. Adds captured-request history regressions and documents global animation weights with per-kind overrides.
+
 ## 0.4.1-fork.3
 
 - Windows 桌宠在显示、还原、唤醒和显示器恢复时重新置顶，不激活或聚焦窗口；不启用周期强制置顶。

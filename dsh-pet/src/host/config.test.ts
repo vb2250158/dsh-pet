@@ -884,6 +884,31 @@ describe('saveUserConfig —— 物理参数 physics（白名单 + 透传保留�
   });
 });
 
+describe('saveUserConfig —— 动作频率 animationWeights（白名单 + 透传保留）', () => {
+  const WEIGHTS = { idle: 30, turn: 5, move: 5 };
+
+  test('整段随请求体写入（设置页「动作频率」卡）', () => {
+    const out = saveOnce({ pets: PETS, animationWeights: WEIGHTS });
+    assert.deepEqual(out?.animationWeights, WEIGHTS, 'animationWeights 必须按请求体整段写入');
+  });
+
+  test('未传时透传磁盘旧值；磁盘上也没有则不凭空造字段', () => {
+    const kept = saveOnce({ pets: PETS }, { pets: PETS, animationWeights: WEIGHTS });
+    assert.deepEqual(kept?.animationWeights, WEIGHTS, '未传时必须原样保留磁盘上的手改值');
+    assert.equal('animationWeights' in (saveOnce({ pets: PETS }) ?? {}), false, '磁盘上也没有时不得凭空写入');
+  });
+
+  test('数值归一化：字符串也按数字落盘', () => {
+    const out = saveOnce({ pets: PETS, animationWeights: { idle: '30', turn: 5, move: 5 } });
+    assert.deepEqual(out?.animationWeights, WEIGHTS);
+  });
+
+  test('非法值 → 整体拒绝（负数与非对象是脏值）', () => {
+    assert.equal(saveOnce({ pets: PETS, animationWeights: { idle: -1, turn: 5, move: 5 } }), null);
+    assert.equal(saveOnce({ pets: PETS, animationWeights: '30' }), null);
+  });
+});
+
 describe('saveUserConfig —— 碎碎念 / 对话模型（白名单 + 透传保留）', () => {
   const WM = { provider: 'deepseek', model: 'deepseek-chat' };
   const CM = { provider: 'opencode', model: 'big-model' };
@@ -1205,9 +1230,9 @@ describe('syncUserConfigFromDefault —— 同步（内置默认原文写入用�
 /**
  * 文件宠物条目的基座 —— 「全局默认 + 种类可覆盖」。
  *
- * 判据：GLOBAL_DEFAULT_KEYS 列出的字段（physics / confineToScreen / 两个配图开关 /
- * 对话动作联动开关 / chatImageLimit / chatMemoryRounds / whisperModel / chatModel /
- * eventsRefreshSec 等）是用户级「成本 / 偏好 /
+ * 判据：GLOBAL_DEFAULT_KEYS 列出的字段（physics / animationWeights / confineToScreen /
+ * 两个配图开关 / 对话动作联动开关 / chatImageLimit / chatMemoryRounds / whisperModel /
+ * chatModel / eventsRefreshSec 等）是用户级「成本 / 偏好 /
  * 环境 / 节奏」参数，用户层写了就对所有条目生效（含 pet pack）；种类文件自己写了就覆盖
  * 自己那份。其余顶层字段（人设 / 表情包 / 动画池 / 文案）的基座仍是内置默认——
  * 一个种类一份人设、一份池、一个表情包目录，各写一份才是 pet pack 的意义。
@@ -1266,10 +1291,11 @@ describe('文件宠物条目 —— 全局默认（用户层作基座）+ 种类
     }
   }
 
-  test('用户层写了这 10 个字段 → 种类条目逐个继承（不再只吃内置默认）', () => {
+  test('用户层写了这些字段 → 种类条目逐个继承（不再只吃内置默认）', () => {
     const out = merged({
       overlay: {
         physics: { ...(BASE_FULL.physics as Record<string, unknown>), petCollision: true, gravity: 999 },
+        animationWeights: { idle: 40, turn: 2, move: 3 },
         confineToScreen: true,
         whisperImageEnabled: false,
         chatImageEnabled: false,
@@ -1285,6 +1311,7 @@ describe('文件宠物条目 —— 全局默认（用户层作基座）+ 种类
     const pig = out.pig;
     assert.equal(rec(pig.physics).petCollision, true, 'physics 应继承用户层');
     assert.equal(rec(pig.physics).gravity, 999);
+    assert.deepEqual(pig.animationWeights, { idle: 40, turn: 2, move: 3 }, 'animationWeights 应继承用户层');
     assert.equal(pig.confineToScreen, true);
     assert.equal(pig.whisperImageEnabled, false);
     assert.equal(pig.chatImageEnabled, false);
@@ -1296,6 +1323,7 @@ describe('文件宠物条目 —— 全局默认（用户层作基座）+ 种类
     assert.deepEqual(pig.eventsRefreshSec, { balance: 900, whisper: 60 });
     // 对照：main 条目一直就是用户层（行为不变）
     assert.equal(rec(out.main.physics).gravity, 999);
+    assert.deepEqual(out.main.animationWeights, { idle: 40, turn: 2, move: 3 });
     assert.equal(out.main.chatMemoryRounds, 9);
   });
 
@@ -1310,6 +1338,7 @@ describe('文件宠物条目 —— 全局默认（用户层作基座）+ 种类
       pack: {
         ...PACK,
         physics: { ...(BASE_FULL.physics as Record<string, unknown>), gravity: 111 },
+        animationWeights: { idle: 5, turn: 5, move: 5 },
         chatMemoryRounds: 2,
         chatImageLimit: 6,
         whisperImageEnabled: true,
@@ -1317,6 +1346,7 @@ describe('文件宠物条目 —— 全局默认（用户层作基座）+ 种类
     });
     const pig = out.pig;
     assert.equal(rec(pig.physics).gravity, 111, '种类自己写了 physics → 用自己那份');
+    assert.deepEqual(pig.animationWeights, { idle: 5, turn: 5, move: 5 }, '种类自己写了 animationWeights → 用自己那份');
     assert.equal(pig.chatMemoryRounds, 2, '种类自己写了 chatMemoryRounds → 用自己那份');
     assert.equal(pig.chatImageLimit, 6, '种类自己写了 chatImageLimit → 用自己那份');
     assert.equal(pig.whisperImageEnabled, true, '种类自己写了开关 → 用自己那份');
