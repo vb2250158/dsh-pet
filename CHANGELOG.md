@@ -1,3 +1,8 @@
+## 0.4.1-fork.3
+
+- Windows 桌宠在显示、还原、唤醒和显示器恢复时重新置顶，不激活或聚焦窗口；不启用周期强制置顶。
+- Restore Windows desktop-pet stacking on show, restore, wake and display recovery without changing foreground focus. Periodic forced repinning remains disabled.
+
 ## 0.4.1-fork.2
 
 - 插件图标移除白色背景，保留人物与文字，使用 256×256 透明 PNG。

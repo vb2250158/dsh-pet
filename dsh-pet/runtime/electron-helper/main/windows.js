@@ -125,6 +125,10 @@ function createWindows({
   function keepOffTaskbar(win) {
     reassertTaskbar(win);
     setTimeout(() => reassertTaskbar(win), 0);
+    // 显示、唤醒及显示器恢复后重新落入置顶带；不轮询，也不激活窗口。
+    if (process.platform === 'win32' && win && !win.isDestroyed() && win.isVisible()) {
+      win.setAlwaysOnTop(true, topmostLevel(process.platform));
+    }
   }
 
   /** 看门狗定时器句柄；null 表示未启动。 */
@@ -231,6 +235,7 @@ function createWindows({
     win.webContents.on('did-finish-load', () => win.webContents.setZoomFactor(scale));
     setWindowIgnore(win, true);
     win.on('show', () => keepOffTaskbar(win));
+    win.on('restore', () => keepOffTaskbar(win));
     win.once('ready-to-show', () => {
       keepOffTaskbar(win);
       win.showInactive();
