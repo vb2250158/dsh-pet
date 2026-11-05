@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet",
-  "version": "0.4.3-fork.1",
+  "version": "0.4.3-fork.2",
   "description": "Display a draggable animated pet with companion chat, speech bubbles and wallet management.",
   "icon": "dsh-pet/assets/logo.png",
   "keywords": [
@@ -96,7 +96,7 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.4 || 4.0.5-alpha.1 || 4.0.5-alpha.2 || 4.0.6-alpha.1",
+    "@deepseek-ai/cordis": "^4.0.4 || 4.0.5-alpha.1 || 4.0.5-alpha.2 || 4.0.6-alpha.1 || 4.0.6-alpha.2",
     "@deepseek-ai/dsh-agent-default-model": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2",
     "@deepseek-ai/dsh-client-connection": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2",
     "@deepseek-ai/dsh-client-ui-primitives": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2",
@@ -110,6 +110,7 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.6-alpha.2",
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.2.0",
     "@types/react": "^18.2.0",
