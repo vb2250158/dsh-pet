@@ -1,5 +1,9 @@
 # dsh-pet 🐾
 
+0.4.3-fork.1 同步上游透明边框、动画续播、状态联动和菜单修复，保留 Windows 层级恢复、认证、显式沙箱设置及独立数据目录。当前验证环境及候选/正式状态见 [tested-environment.json](tested-environment.json)；日常仅验证当前 Windows 源码 Web 与在用 Pet helper。
+
+0.4.3-fork.1 integrates upstream rendering, animation, work-state and menu fixes while retaining Windows stacking recovery, authentication, explicit sandbox settings and isolated data paths. [tested-environment.json](tested-environment.json) declares the current Windows source Web/Pet target and separates candidate validation from formal installation.
+
 公开维护 fork：<https://github.com/vb2250158/dsh-pet>，上游：<https://github.com/PC2005-cloud/dsh-pet>。`0.4.1-fork.2` 将插件图标改为透明背景，保留人物与文字；代码沿用 MIT 许可，素材继续遵守上游署名及禁止商用要求。
 
 Public maintenance fork: <https://github.com/vb2250158/dsh-pet>, based on <https://github.com/PC2005-cloud/dsh-pet>. Version `0.4.1-fork.2` removes the plugin icon background while retaining the character and lettering. Code remains MIT licensed; upstream asset attribution and noncommercial restrictions still apply.

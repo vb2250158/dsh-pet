@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "support": "Current maintained Windows source Web and Pet helper only",
+  "core": {
+    "version": "0.2.2-alpha.3",
+    "commit": "80edbdff23f93d742235d7410c1ef0905ec90500"
+  },
+  "runtime": {
+    "os": "Windows",
+    "arch": "x64",
+    "node": "24.15.0",
+    "npm": "11.12.1",
+    "pnpm": "11.28.5"
+  },
+  "candidate": {
+    "pluginVersion": "0.4.3-fork.1",
+    "status": "Source regressions and isolated current-Core Web API/resources verified; native UI acceptance pending"
+  },
+  "formal": {
+    "pluginVersion": "0.4.1-fork.3",
+    "status": "last-confirmed-before-this-candidate"
+  },
+  "compatibilityMatrix": false,
+  "validation": {
+    "focusedTests": {
+      "passed": 289,
+      "skipped": 1,
+      "failed": 0
+    },
+    "webApi": true,
+    "servedClientBytes": true,
+    "nativeUi": false,
+    "qaProfileInstallationPnpm": "11.7.0",
+    "developmentPnpm": "11.28.5"
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet",
-  "version": "0.4.1-fork.4",
+  "version": "0.4.3-fork.1",
   "description": "Display a draggable animated pet with companion chat, speech bubbles and wallet management.",
   "icon": "dsh-pet/assets/logo.png",
   "keywords": [
@@ -57,7 +57,8 @@
     "dsh-pet/assets/sound",
     "INSTALL.md",
     "FEATURES.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "tested-environment.json"
   ],
   "scripts": {
     "build": "npm --prefix dsh-pet run build",
@@ -84,12 +85,7 @@
     },
     "compatibility": {
       "dshReleases": {
-        "0.1.7-rc.2": "incompatible",
-        "0.2.0-rc.1": "compatible",
-        "0.2.0-rc.2": "compatible",
-        "0.2.1-rc.2": "compatible",
-        "0.2.1-rc.3": "compatible",
-        "0.2.2-alpha.2": "compatible"
+        "0.2.2-alpha.3": "compatible"
       }
     },
     "client": {
