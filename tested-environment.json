@@ -13,8 +13,8 @@
     "pnpm": "11.28.5"
   },
   "candidate": {
-    "pluginVersion": "0.4.3-fork.4",
-    "status": "Activity lifecycle source candidate; formal installation and page acceptance pending"
+    "pluginVersion": "0.4.3-fork.5",
+    "status": "Git plugin preparation candidate; source Web runtime unchanged from fork.4; normal package installation and formal acceptance are separate"
   },
   "packagingCandidate": {
     "pluginVersion": "0.4.3-fork.2",

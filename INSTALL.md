@@ -1,3 +1,9 @@
+## 固定 Git 安装的构建
+
+从 Git 安装本包时，需要对已审查的固定提交允许构建脚本。`prepare` 与 `prepack` 调用 `npm run build:plugin`，生成 Host/Web 入口及现有桌宠 Helper 需要的 `shared-core.js`。`--ignore-scripts` 会跳过此步骤，不能把缺少入口的依赖导入视为安装完成。
+
+本路径不构建 standalone、Electron 应用或安装包。开发者需要完整发布检查时显式运行 `npm run prepack:release`；原有完整 `npm run build` 与内层发布命令保留。
+
 # 安装（dsh-pet）
 
 > 返回 [README](README.md)

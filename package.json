@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet",
-  "version": "0.4.3-fork.4",
+  "version": "0.4.3-fork.5",
   "description": "Display a draggable animated pet with companion chat, speech bubbles and wallet management.",
   "icon": "dsh-pet/assets/logo.png",
   "keywords": [
@@ -65,7 +65,10 @@
     "test": "npm --prefix dsh-pet test",
     "typecheck": "npm --prefix dsh-pet run typecheck",
     "lint": "npm --prefix dsh-pet run lint",
-    "prepack": "npm --prefix dsh-pet run prepack"
+    "prepack": "npm run build:plugin",
+    "build:plugin": "npm --prefix dsh-pet run build:plugin",
+    "prepare": "npm run build:plugin",
+    "prepack:release": "npm --prefix dsh-pet run prepack"
   },
   "license": "MIT",
   "engines": {
