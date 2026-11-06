@@ -13,8 +13,9 @@
     "pnpm": "11.28.5"
   },
   "candidate": {
-    "pluginVersion": "0.4.3-fork.5",
-    "status": "Git plugin preparation candidate; source Web runtime unchanged from fork.4; normal package installation and formal acceptance are separate"
+    "pluginVersion": "0.4.5-fork.1",
+    "status": "Upstream0.4.5 source merge candidate; maintained Alpha3 source Web behavior checks and formal installation are separate",
+    "upstreamCommit": "60bb2eb4113eca92b2636ab906f8e6c9c934ae13"
   },
   "packagingCandidate": {
     "pluginVersion": "0.4.3-fork.2",
