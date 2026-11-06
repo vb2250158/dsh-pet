@@ -178,7 +178,7 @@ export function mountBaifan(ctx: BaifanContext): () => void {
     disposed = true;
     if (timer !== null) window.clearInterval(timer);
     timer = null;
-    void show.halt('');
+    void show.dispose();
     // 先发 DELETE 再 abort：abort 会让这次删除立刻失败，留下一条到 TTL 才消失的菜单项。
     void fetch(ROUTE + '/menu/item?owner=' + encodeURIComponent(OWNER), { method: 'DELETE' }).catch(() => {});
     abort.abort();

@@ -1,6 +1,10 @@
 # dsh-pet 🐾
 
-本轮维护候选 `0.4.3-fork.3` 合入原上游至 `31ed1b3`，保留本地定制，并修复吃白饭活动放锁后的计时器与卸载后迟到回执。受测环境为 Windows x64、Node 24.15.0、Core `3ff2154e`（0.2.2-alpha.3），详见根目录 `tested-environment.json`；源码检查不代表已在正式环境实装或完成桌宠显示验收。
+`0.4.3-fork.4` 修复吃白饭活动停止、卸载和连续重开时的迟到取锁回执；正式安装与页面验收由宿主维护流程完成。
+
+`0.4.3-fork.4` fixes late lock receipts during activity stop, disposal and replacement. Installation and page acceptance follow the Host maintenance workflow.
+
+前一维护候选 `0.4.3-fork.3` 合入原上游至 `31ed1b3`，保留本地定制，并修复吃白饭活动放锁后的计时器与卸载后迟到回执。受测环境为 Windows x64、Node 24.15.0、Core `3ff2154e`（0.2.2-alpha.3），详见根目录 `tested-environment.json`；源码检查不代表已在正式环境实装或完成桌宠显示验收。
 
 公开维护版 0.4.1-fork.4：<https://github.com/vb2250158/dsh-pet>。插件图标使用透明背景，保留人物与文字。合并上游设置与对话页、宠物头像、工作会话跳转、显示快捷键和语音改进，保留系统字体、透明渲染、Electron 数据隔离及待办标识保护。待办读写、对话记忆、残留记忆管理、会话图片读取、语音音色列表及合成要求宿主浏览器/API 认证及 Host/Origin 检查。待办文件读取失败、损坏或版本不支持时拒绝写入并保留原文件；修复文件后可重试。独立模式复用自身 HTTP 安全入口的授权结果，私有路由不接受匿名读取。
 

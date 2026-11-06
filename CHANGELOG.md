@@ -1,3 +1,9 @@
+# 0.4.3-fork.4
+
+- 停止或卸载吃白饭活动后，迟到的取锁回执只释放原租约，不再移动宠物或启动续期；连续重开只保留最后一场，上一场收尾不能释放新场的锁。
+- 卸载撤销排队的重开，收场取消动画等待；普通停止后仍可重新开演。补充延迟回执、连续切换、卸载和重新进入回归。
+- Late activity lock receipts release their own lease after stop or unload. Replacements wait for prior cleanup, only the latest request starts, and disposal cancels queued starts and animation waits.
+
 # 0.4.3-fork.3
 
 - 合入原上游至 `31ed1b3`：新增吃白饭玩法、修正透明滤镜的文档流占位、按条件使用 XWayland，并改为使用插件自有 Electron 运行目录。保留宿主认证、独立用户数据、Windows 层级恢复及现有模型和对话逻辑。

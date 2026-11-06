@@ -13,8 +13,8 @@
     "pnpm": "11.28.5"
   },
   "candidate": {
-    "pluginVersion": "0.4.3-fork.3",
-    "status": "Current-Core source build and focused regressions; formal installation and native UI acceptance pending"
+    "pluginVersion": "0.4.3-fork.4",
+    "status": "Activity lifecycle source candidate; formal installation and page acceptance pending"
   },
   "packagingCandidate": {
     "pluginVersion": "0.4.3-fork.2",
@@ -40,13 +40,16 @@
   },
   "validation": {
     "focusedTests": {
-      "passed": 231,
-      "skipped": 1,
+      "passed": 305,
+      "skipped": 0,
       "failed": 0
     },
     "lifecycleNegativeControls": [
       "renewal interval remains after release",
-      "late config registers menu after unload"
+      "late config registers menu after unload",
+      "late lock acquisition after stop",
+      "queued activity starts after disposal",
+      "old activity cleanup releases replacement lease"
     ],
     "sourceBuild": true,
     "typecheck": true,
