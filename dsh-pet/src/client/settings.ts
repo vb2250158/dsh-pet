@@ -171,6 +171,7 @@ export function makePetConfigSection(
     const [chatModel, setChatModel] = useState<ModelSelection>({ provider: '', model: '' });
     // 对话历史条数（全局默认）：初值 10 是内置默认，加载效应会用成品 main.chatMemoryRounds 覆盖。
     const [chatMemory, setChatMemory] = useState(10);
+    const [chatRequestLimit, setChatRequestLimit] = useState<number | undefined>(undefined);
     // 对话配图张数上限（全局默认）：初值 20 是内置默认，加载后由成品值覆盖。
     const [chatImageLimit, setChatImageLimit] = useState(20);
     // 头像预览的破缓存版本号：上传成功后换一个，预览才会重新取图（同一 URL 会被浏览器记住）。
@@ -204,6 +205,7 @@ export function makePetConfigSection(
         if (patch.whisperModel !== undefined) setWhisperModel(patch.whisperModel);
         if (patch.chatModel !== undefined) setChatModel(patch.chatModel);
         if (patch.chatMemoryRounds !== undefined) setChatMemory(patch.chatMemoryRounds);
+        if (patch.chatRequestLimitBytes !== undefined) setChatRequestLimit(patch.chatRequestLimitBytes);
         if (patch.chatImageLimit !== undefined) setChatImageLimit(patch.chatImageLimit);
       },
       [replace],
@@ -314,6 +316,7 @@ export function makePetConfigSection(
         whisperModel,
         chatModel,
         chatMemoryRounds: chatMemory,
+        chatRequestLimitBytes: chatRequestLimit,
         chatImageLimit,
         font,
         animationWeights: weights,
@@ -409,8 +412,10 @@ export function makePetConfigSection(
           chatModel,
           onModelChange: setModel,
           chatMemory,
+          chatRequestLimit,
           chatImageLimit,
           onChatMemoryChange: setChatMemory,
+          onChatRequestLimitChange: setChatRequestLimit,
           onChatImageLimitChange: setChatImageLimit,
           values: chatFlags,
           onFlagChange: setChatFlag,

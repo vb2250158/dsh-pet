@@ -248,6 +248,10 @@ export const es: Record<Key, string> = {
   modelCatalogFailed:
     'No se pudo cargar la lista de modelos (recarga la página para reintentar); tus valores actuales se conservan tal cual.',
   chatMemory: 'Rondas de historial del chat',
+  chatRequestLimit: 'Límite de registros por mascota (bytes)',
+  chatRequestLimitHint:
+    'Predeterminado: 16 MiB, incluidas las solicitudes fallidas. Al llegar al límite se pausa la generación de esta mascota. Borra la memoria o aumenta el límite; no se borran registros automáticamente.',
+  invalidChatRequestLimit: 'El límite debe ser un número entero positivo de bytes.',
   chatMemoryHint:
     'Cuántas rondas recientes lleva cada solicitud de chat (1 ronda = 1 pregunta + 1 respuesta; 0 = sin historial, cada mensaje empieza de cero). La memoria en sí lo guarda todo: esto solo decide cuánto entra en el contexto; más rondas recuerdan más y gastan más tokens. Valor predeterminado global, compartido por todas las mascotas (un pet pack puede sobrescribirlo en el archivo de su propio tipo).',
   invalidChatMemory: 'Revisa las rondas de historial del chat: debe ser un número ≥ 0.',

@@ -247,6 +247,10 @@ export const fr: Record<Key, string> = {
   modelCatalogFailed:
     'Échec du chargement de la liste des modèles (rafraîchissez la page pour réessayer) ; vos valeurs actuelles sont conservées telles quelles.',
   chatMemory: "Tours d'historique de discussion",
+  chatRequestLimit: 'Limite des requêtes par compagnon (octets)',
+  chatRequestLimitHint:
+    'Par défaut : 16 Mio, requêtes échouées comprises. À la limite, la génération de ce compagnon est suspendue. Effacez la mémoire ou augmentez la limite ; aucun enregistrement n’est supprimé automatiquement.',
+  invalidChatRequestLimit: 'La limite doit être un entier positif en octets.',
   chatMemoryHint:
     'Nombre de tours récents transportés par chaque requête de discussion (1 tour = 1 question + 1 réponse ; 0 = aucun historique, chaque message repart de zéro). La mémoire elle-même conserve tout — cette valeur décide seulement de ce qui entre dans le contexte : plus elle est élevée, plus le compagnon se souvient, et plus cela coûte de tokens. Valeur globale par défaut, partagée par tous les compagnons (un pet pack peut la remplacer dans son propre fichier de type).',
   invalidChatMemory: "Vérifiez les tours d'historique : il faut un nombre ≥ 0.",

@@ -13,8 +13,8 @@
     "pnpm": "11.28.5"
   },
   "candidate": {
-    "pluginVersion": "0.4.5-fork.1",
-    "status": "Upstream0.4.5 source merge candidate; maintained Alpha3 source Web behavior checks and formal installation are separate",
+    "pluginVersion": "0.4.5-fork.2",
+    "status": "Request-persistence source candidate; current RC1 runtime combination and formal installation remain pending",
     "upstreamCommit": "60bb2eb4113eca92b2636ab906f8e6c9c934ae13"
   },
   "packagingCandidate": {
@@ -27,6 +27,15 @@
     "status": "last-confirmed-before-this-candidate"
   },
   "compatibilityMatrix": false,
+  "requestPersistenceValidation": {
+    "focusedTests": { "passed": 446, "failed": 0, "skipped": 0 },
+    "requestBudgetDefaultBytes": 16777216,
+    "sourceBuild": true,
+    "typecheck": true,
+    "focusedLint": true,
+    "currentRc1Combination": "pending independent candidate installation and runtime checks",
+    "formalInstall": false
+  },
   "priorValidation": {
     "focusedTests": {
       "passed": 289,

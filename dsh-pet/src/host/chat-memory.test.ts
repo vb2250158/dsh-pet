@@ -33,12 +33,17 @@ const IMAGE: PetImageRef = {
 
 /** 一份假 ctx：对话生成只读 agentDefaultModel 与 llm.stream，reply 为模型回的那句。
  *  `captured` 传了就把每次 stream 的 options 收进去（断言提示词注入了哪几段）。 */
-function fakeCtx(reply: string, captured?: Record<string, unknown>[]): unknown {
+function fakeCtx(
+  reply: string,
+  captured?: Record<string, unknown>[],
+  onStream?: (options: Record<string, unknown>) => void,
+): unknown {
   return {
     agentDefaultModel: { currentSelection: () => ({ provider: 'test', model: 'test-model' }) },
     llm: {
       stream: (options: unknown) => {
         captured?.push(options as Record<string, unknown>);
+        onStream?.(options as Record<string, unknown>);
         return (async function* () {
           yield { type: 'text-delta', index: 0, text: reply };
         })();
@@ -70,9 +75,10 @@ function createMemory(
     records?: Array<{ petId: string; leaf: string; data: Record<string, unknown> }>;
   },
   captured?: Record<string, unknown>[],
+  onStream?: (options: Record<string, unknown>) => void,
 ) {
   return createChatMemory({
-    ctx: fakeCtx(reply, captured),
+    ctx: fakeCtx(reply, captured, onStream),
     configPaths: ws.configPaths,
     log: { info: () => {}, warn: () => {}, error: () => {} },
     memeDirsFor: () => (memeDir === undefined ? [] : [memeDir]),
@@ -93,6 +99,19 @@ function userTextOf(options: Record<string, unknown> | undefined): string {
   const messages = options?.messages as Array<{ content: Array<{ type: string; text?: string }> }> | undefined;
   const last = messages?.[messages.length - 1];
   return last?.content?.find((block) => block.type === 'text')?.text ?? '';
+}
+
+/** Only synthetic request records are read by these regressions. */
+function readRequests(userRoot: string): Array<{
+  version: number;
+  time: number;
+  turnTs?: number;
+  request: Record<string, unknown>;
+}> {
+  const buckets: Record<string, Record<string, { requests?: ReturnType<typeof readRequests> }>> = JSON.parse(
+    readFileSync(join(userRoot, 'memory.json'), 'utf8'),
+  );
+  return Object.values(buckets).flatMap((pets) => Object.values(pets).flatMap((pet) => pet.requests ?? []));
 }
 
 /** 读回刚落盘的记忆消息（只应有一只宠物一个分桶）。 */
@@ -561,6 +580,292 @@ describe('createChatMemory —— 第三方记忆提供者', () => {
       const r = await createMemory('在的', ws).chatWithPet('main', '在吗');
       assert.equal(r.ok, true);
       assert.equal(readMessages(ws.userRoot).length, 2);
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('模型实际请求持久化', () => {
+  beforeEach(() => resetChatMemoryProviders());
+
+  test('实际请求先落盘再调模型，召回后的三个字段可重建，且不保存 signal 或凭据', async () => {
+    const ws = tempWorkspace({ chatImageEnabled: false, chatAnimationEnabled: false });
+    const captured: Record<string, unknown>[] = [];
+    registerChatMemoryProvider({
+      id: 'synthetic-recall',
+      recall: () => ({
+        system: 'synthetic effective system',
+        userText: 'synthetic effective user',
+        history: [{ role: 'user', content: 'synthetic recalled history', ts: 1 }],
+      }),
+    });
+    try {
+      const r = await createMemory('synthetic reply', ws, undefined, undefined, captured, (options) => {
+        const requests = readRequests(ws.userRoot);
+        assert.equal(requests.length, 1, 'request must already be durable at dispatch');
+        const { signal, ...visible } = options;
+        assert(signal instanceof AbortSignal);
+        assert.deepEqual(requests[0]?.request, JSON.parse(JSON.stringify(visible)));
+      }).chatWithPet('main', 'synthetic original user');
+      assert.equal(r.ok, true);
+      const request = readRequests(ws.userRoot)[0];
+      assert.equal(request?.version, 1);
+      assert.equal(request?.request.system, 'synthetic effective system');
+      assert.equal(userTextOf(request?.request), 'synthetic effective user');
+      assert(JSON.stringify(request?.request).includes('synthetic recalled history'));
+      assert.equal('signal' in (request?.request ?? {}), false);
+      assert.equal('headers' in (request?.request ?? {}), false);
+      assert.equal('credentials' in (request?.request ?? {}), false);
+      assert.equal(readMessages(ws.userRoot)[0]?.content, 'synthetic original user');
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('没有召回的旧记忆仍可读取；重新建立 owner 后继续保存实际请求', async () => {
+    const ws = tempWorkspace({ chatImageEnabled: false, chatAnimationEnabled: false });
+    try {
+      mkdirSync(ws.userRoot, { recursive: true });
+      writeFileSync(
+        join(ws.userRoot, 'memory.json'),
+        JSON.stringify({ main: { main: { messages: [{ role: 'user', content: 'synthetic legacy', ts: 1 }] } } }),
+      );
+      assert.equal((await createMemory('first', ws).chatWithPet('main', 'one')).ok, true);
+      assert.equal((await createMemory('second', ws).chatWithPet('main', 'two')).ok, true);
+      assert.equal(readRequests(ws.userRoot).length, 2);
+      assert(readMessages(ws.userRoot).some((message) => message.content === 'synthetic legacy'));
+      const messages = readMessages(ws.userRoot);
+      assert.equal(messages[messages.length - 1]?.content, 'second');
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('适配器修改请求对象不会改写已持久化的实际输入', async () => {
+    const ws = tempWorkspace({ chatImageEnabled: false, chatAnimationEnabled: false });
+    try {
+      const memory = createMemory('reply', ws, undefined, undefined, undefined, (options) => {
+        options.system = 'synthetic adapter mutation';
+        options.messages = [];
+      });
+      assert.equal((await memory.chatWithPet('main', 'synthetic original input')).ok, true);
+      const request = readRequests(ws.userRoot)[0]?.request;
+      assert.notEqual(request?.system, 'synthetic adapter mutation');
+      assert.equal(userTextOf(request), 'synthetic original input');
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('首个模型失败与回落请求分别先落盘，失败记录不会被成功覆盖', async () => {
+    const ws = tempWorkspace({
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+      chatModel: { provider: 'synthetic-failed', model: 'first' },
+    });
+    const calls: string[] = [];
+    try {
+      const r = await createMemory('fallback', ws, undefined, undefined, undefined, (options) => {
+        const requests = readRequests(ws.userRoot);
+        calls.push(String(options.provider));
+        assert.equal(requests.length, calls.length);
+        assert.equal(requests[requests.length - 1]?.request.provider, options.provider);
+        if (options.provider === 'synthetic-failed') throw new Error('synthetic model unavailable');
+      }).chatWithPet('main', 'retry');
+      assert.equal(r.ok, true);
+      assert.deepEqual(calls, ['synthetic-failed', 'test']);
+      const requests = readRequests(ws.userRoot);
+      assert.equal(requests.length, 2);
+      assert.equal(requests[0]?.turnTs, readMessages(ws.userRoot)[0]?.ts);
+      assert.equal(requests[1]?.turnTs, requests[0]?.turnTs);
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('请求保存失败时不调任何候选模型，旧历史原字节保留', async () => {
+    const ws = tempWorkspace({
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+      chatModel: { provider: 'synthetic-failed', model: 'first' },
+    });
+    const captured: Record<string, unknown>[] = [];
+    try {
+      mkdirSync(ws.userRoot, { recursive: true });
+      const original = JSON.stringify({ main: { main: { messages: [{ role: 'user', content: 'keep', ts: 1 }] } } });
+      writeFileSync(join(ws.userRoot, 'memory.json'), original);
+      mkdirSync(join(ws.userRoot, 'memory.json.tmp'));
+      const r = await createMemory('unreachable', ws, undefined, undefined, captured).chatWithPet('main', 'blocked');
+      assert.equal(r.ok, false);
+      assert.equal(captured.length, 0);
+      assert.equal(readFileSync(join(ws.userRoot, 'memory.json'), 'utf8'), original);
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('模型全失败仍保留请求；清空会移除仅有请求的宠物记录', async () => {
+    const ws = tempWorkspace({ chatImageEnabled: false, chatAnimationEnabled: false });
+    try {
+      const memory = createMemory('unreachable', ws, undefined, undefined, undefined, () => {
+        throw new Error('synthetic unavailable');
+      });
+      assert.equal((await memory.chatWithPet('main', 'failed')).ok, false);
+      assert.equal(readRequests(ws.userRoot).length, 1);
+      assert.equal(readMessages(ws.userRoot).length, 0);
+      await memory.deleteHistory('main');
+      assert.equal(readRequests(ws.userRoot).length, 0);
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('删除一轮同时移除该轮全部请求，保留另一轮', async (t) => {
+    const ws = tempWorkspace({ chatImageEnabled: false, chatAnimationEnabled: false });
+    let now = Date.now();
+    t.mock.method(Date, 'now', () => now);
+    try {
+      const memory = createMemory('reply', ws);
+      await memory.chatWithPet('main', 'first');
+      const first = readMessages(ws.userRoot)[0]?.ts;
+      now += 1;
+      await memory.chatWithPet('main', 'second');
+      assert.equal(typeof first, 'number');
+      await memory.deleteHistory('main', [first!]);
+      const requests = readRequests(ws.userRoot);
+      assert.equal(requests.length, 1);
+      assert.equal(userTextOf(requests[0]?.request), 'second');
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+});
+
+/** Exact serialized array bytes at the existing memory.json nesting, including success metadata. */
+function requestBudget(records: ReturnType<typeof readRequests>): number {
+  const reserved = records.map((record) => ({ ...record, turnTs: Number.MAX_SAFE_INTEGER }));
+  return (
+    Buffer.byteLength(JSON.stringify({ entry: { pet: { requests: reserved } } }, null, 2), 'utf8') -
+    Buffer.byteLength(JSON.stringify({ entry: { pet: { requests: [] } } }, null, 2), 'utf8') +
+    2
+  );
+}
+
+describe('每宠物实际请求字节预算', () => {
+  beforeEach(() => {
+    resetChatMemoryProviders();
+    registerChatMemoryProvider({
+      id: 'synthetic-budget',
+      recall: () => ({ system: '中文🙂', history: [], userText: '请求🌧' }),
+    });
+  });
+
+  test('Unicode 按实际 UTF-8 计量，边界可保存，少一字节在调用前拒绝', async () => {
+    const overlay = { chatImageEnabled: false, chatAnimationEnabled: false };
+    const ws = tempWorkspace(overlay);
+    const calls: Record<string, unknown>[] = [];
+    try {
+      const memory = createMemory('reply', ws, undefined, undefined, calls);
+      assert.equal((await memory.chatWithPet('main', 'one')).ok, true);
+      const records = readRequests(ws.userRoot);
+      const limit = requestBudget(records);
+      assert(Buffer.byteLength(JSON.stringify(records), 'utf8') > JSON.stringify(records).length);
+      await memory.deleteHistory('main');
+      writeFileSync(ws.configPaths.userFile, JSON.stringify({ ...overlay, chatRequestLimitBytes: limit }));
+      assert.equal((await memory.chatWithPet('main', 'two')).ok, true);
+      const saved = readFileSync(join(ws.userRoot, 'memory.json'), 'utf8');
+      const withoutRequests = JSON.parse(saved);
+      withoutRequests.main.main.requests = [];
+      const actualBytes =
+        Buffer.byteLength(saved, 'utf8') - Buffer.byteLength(JSON.stringify(withoutRequests, null, 2), 'utf8') + 2;
+      assert(actualBytes <= limit, 'final on-disk array must remain within the configured byte limit');
+      await memory.deleteHistory('main');
+      writeFileSync(ws.configPaths.userFile, JSON.stringify({ ...overlay, chatRequestLimitBytes: limit - 1 }));
+      const before = readFileSync(join(ws.userRoot, 'memory.json'), 'utf8');
+      const result = await memory.chatWithPet('main', 'three');
+      assert.equal(result.ok, false);
+      assert.equal(calls.length, 2);
+      assert.equal(result.ok === false && result.message?.includes('chatRequestLimitBytes'), true);
+      assert.equal(readFileSync(join(ws.userRoot, 'memory.json'), 'utf8'), before);
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('回落前重新检查预算，保留已调用的失败请求，不调用超额的下一模型', async () => {
+    const overlay = {
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+      chatModel: { provider: 'first', model: 'model' },
+    };
+    const ws = tempWorkspace(overlay);
+    const calls: Record<string, unknown>[] = [];
+    try {
+      const calibration = createMemory('reply', ws);
+      await calibration.chatWithPet('main', 'one');
+      const limit = requestBudget(readRequests(ws.userRoot));
+      await calibration.deleteHistory('main');
+      writeFileSync(ws.configPaths.userFile, JSON.stringify({ ...overlay, chatRequestLimitBytes: limit }));
+      const memory = createMemory('unreachable', ws, undefined, undefined, calls, () => {
+        throw new Error('synthetic failed model');
+      });
+      const result = await memory.chatWithPet('main', 'two');
+      assert.equal(result.ok, false);
+      assert.equal(result.ok === false && result.message?.includes('chatRequestLimitBytes'), true);
+      assert.equal(calls.length, 1);
+      assert.equal(readRequests(ws.userRoot).length, 1);
+      assert.equal(readRequests(ws.userRoot)[0]?.turnTs, undefined);
+      assert.equal(readMessages(ws.userRoot).length, 0);
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('并发聊天串行计量，其他宠物独立；按轮删除后能继续', async () => {
+    const overlay = { chatImageEnabled: false, chatAnimationEnabled: false, pets: [{ id: 'main' }, { id: 'peer' }] };
+    const ws = tempWorkspace(overlay);
+    const calls: Record<string, unknown>[] = [];
+    try {
+      const memory = createMemory('reply', ws, undefined, undefined, calls);
+      await memory.chatWithPet('main', 'one');
+      const limit = requestBudget(readRequests(ws.userRoot));
+      await memory.deleteHistory('main');
+      writeFileSync(ws.configPaths.userFile, JSON.stringify({ ...overlay, chatRequestLimitBytes: limit }));
+      const outcomes = await Promise.all([memory.chatWithPet('main', 'two'), memory.chatWithPet('main', 'three')]);
+      assert.deepEqual(
+        outcomes.map((outcome) => outcome.ok),
+        [true, false],
+      );
+      assert.equal(calls.length, 2);
+      assert.equal((await memory.chatWithPet('peer', 'four')).ok, true);
+      const main = (await memory.readMemory()).main.main;
+      await memory.deleteHistory('main', [main.messages[0].ts]);
+      assert.equal((await memory.chatWithPet('main', 'five')).ok, true);
+      const file = await memory.readMemory();
+      assert.equal(file.main.main.requests?.length, 1);
+      assert.equal(file.main.peer.requests?.length, 1);
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('已有文件超过新预算时原样保留，提高正常配置预算后继续', async () => {
+    const overlay = { chatImageEnabled: false, chatAnimationEnabled: false };
+    const ws = tempWorkspace(overlay);
+    const calls: Record<string, unknown>[] = [];
+    try {
+      const memory = createMemory('reply', ws, undefined, undefined, calls);
+      await memory.chatWithPet('main', 'one');
+      const before = readFileSync(join(ws.userRoot, 'memory.json'), 'utf8');
+      writeFileSync(ws.configPaths.userFile, JSON.stringify({ ...overlay, chatRequestLimitBytes: 1 }));
+      assert.equal((await memory.chatWithPet('main', 'two')).ok, false);
+      assert.equal(readFileSync(join(ws.userRoot, 'memory.json'), 'utf8'), before);
+      assert.equal(calls.length, 1);
+      writeFileSync(ws.configPaths.userFile, JSON.stringify({ ...overlay, chatRequestLimitBytes: 16777216 }));
+      assert.equal((await memory.chatWithPet('main', 'three')).ok, true);
+      assert.equal(readRequests(ws.userRoot).length, 2);
+      assert.equal(readMessages(ws.userRoot).length, 4);
     } finally {
       rmSync(ws.dir, { recursive: true, force: true });
     }

@@ -243,6 +243,10 @@ export const de: Record<Key, string> = {
   modelCatalogFailed:
     'Modellliste konnte nicht geladen werden (Seite neu laden für einen neuen Versuch); die aktuellen Konfigurationswerte bleiben unverändert erhalten.',
   chatMemory: 'Chat-Verlaufsrunden',
+  chatRequestLimit: 'Anfragelimit pro Haustier (Bytes)',
+  chatRequestLimitHint:
+    'Standard: 16 MiB, einschließlich fehlgeschlagener Anfragen. Am Limit pausiert die Generierung für dieses Haustier. Speicher leeren oder Limit erhöhen; Datensätze werden nicht automatisch gelöscht.',
+  invalidChatRequestLimit: 'Das Anfragelimit muss eine positive ganze Bytezahl sein.',
   chatMemoryHint:
     'Wie viele der letzten Runden jeder Chat-Aufruf mitführt (1 Runde = 1 Frage + 1 Antwort; 0 = kein Verlauf, jede Nachricht ist neu). Das Gedächtnis selbst behält alles – dieser Wert bestimmt nur, wie viel in den Kontext kommt: mehr merkt mehr und kostet mehr Token. Globaler Standard für alle Pets (ein Pet-Pack kann ihn in seiner Art-Datei überschreiben).',
   invalidChatMemory: 'Bitte Chat-Verlaufsrunden prüfen: Zahl ≥ 0 erforderlich.',

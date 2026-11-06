@@ -278,11 +278,13 @@ describe('buildSaveBody —— 请求体字段', () => {
       whisperModel: { provider: 'a', model: 'b' },
       chatModel: { provider: '', model: '' },
       chatMemoryRounds: 0,
+      chatRequestLimitBytes: 8192,
       chatImageLimit: 3,
       font: { size: 20 },
     } as unknown as SaveFields;
     const body = buildSaveBody(fields);
     assert.equal(body.chatMemoryRounds, 0);
+    assert.equal(body.chatRequestLimitBytes, 8192);
     assert.deepEqual(body.physics, { gravity: 3 });
     assert.equal(body.notificationsEnabled, false);
   });

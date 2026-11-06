@@ -169,6 +169,8 @@ export function topFieldValid(key: string, value: unknown): boolean {
       const n = Number(value);
       return Number.isFinite(n) && n >= 0;
     }
+    case 'chatRequestLimitBytes':
+      return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
     case 'chatImageLimit': {
       // 对话配图张数上限：非负数字（0 = 不限制）；小数按消费者 Math.floor 取整
       const n = Number(value);

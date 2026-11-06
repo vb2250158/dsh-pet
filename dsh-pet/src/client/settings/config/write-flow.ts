@@ -66,6 +66,7 @@ export function createWriteFlow(deps: WriteFlowDeps): WriteFlow {
       whisperModel: fields.whisperModel,
       chatModel: fields.chatModel,
       chatMemory: fields.chatMemoryRounds,
+      chatRequestLimitBytes: fields.chatRequestLimitBytes,
       chatImageLimit: fields.chatImageLimit,
       font: fields.font,
     });

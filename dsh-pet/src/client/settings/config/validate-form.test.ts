@@ -36,6 +36,12 @@ const valid = (overrides: Partial<FormValues> = {}): FormValues => ({
 });
 
 describe('validateForm —— 保存前校验', () => {
+  test('请求记录预算为正安全整数，旧客户端省略时仍可保存其他字段', () => {
+    assert.equal(validateForm(valid({ chatRequestLimitBytes: 16777216 })), null);
+    for (const value of [0, -1, 0.5, Infinity, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
+      assert.equal(validateForm(valid({ chatRequestLimitBytes: value })), 'invalidChatRequestLimit');
+    }
+  });
   test('全合法：返回 null', () => {
     assert.equal(validateForm(valid()), null);
   });

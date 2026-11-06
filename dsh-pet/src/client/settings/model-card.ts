@@ -44,6 +44,10 @@ export interface ModelCardProps {
   onModelChange: (key: ModelFieldKey, value: ModelSelection) => void;
   /** 对话历史条数。 */
   chatMemory: number;
+  /** Per-pet request storage budget; absent before a valid config response is loaded. */
+  chatRequestLimit?: number;
+  /** Change the positive byte budget through the normal config save flow. */
+  onChatRequestLimitChange: (value: number) => void;
   /** 对话配图张数上限。 */
   chatImageLimit: number;
   /** 改对话历史条数。 */
@@ -74,10 +78,10 @@ export function makeModelCard(
     const { busy, catalog, failed } = props;
 
     /** 「全局默认」的数字格：标签与问号在上、数字输入在下。 */
-    const numField = (label: string, value: number, setter: (v: number) => void) =>
+    const numField = (label: string, value: number, setter: (v: number) => void, min = '0') =>
       field(
         t(label),
-        h('input', numberInputProps(value, setter, { step: '1', min: '0', disabled: busy })),
+        h('input', numberInputProps(value, setter, { step: '1', min, disabled: busy })),
         t(label + 'Hint'),
       );
 
@@ -117,6 +121,9 @@ export function makeModelCard(
           className: 'dsh-pet-cfg__grid4',
           children: [
             numField('chatMemory', props.chatMemory, props.onChatMemoryChange),
+            props.chatRequestLimit === undefined
+              ? null
+              : numField('chatRequestLimit', props.chatRequestLimit, props.onChatRequestLimitChange, '1'),
             numField('chatImageLimit', props.chatImageLimit, props.onChatImageLimitChange),
           ],
         }),

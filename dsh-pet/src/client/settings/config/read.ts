@@ -45,6 +45,8 @@ export interface MainConfigPatch {
   whisperModel?: ModelSelection;
   chatModel?: ModelSelection;
   chatMemoryRounds?: number;
+  /** Positive integer byte budget; absent means this response supplied no valid value. */
+  chatRequestLimitBytes?: number;
   chatImageLimit?: number;
 }
 
@@ -101,6 +103,13 @@ export function readMainConfig(merged: MergedConfig): MainConfigPatch | null {
   if (chatModel) patch.chatModel = chatModel;
   const rounds = nonNegative(main.chatMemoryRounds);
   if (rounds !== undefined) patch.chatMemoryRounds = rounds;
+  if (
+    typeof main.chatRequestLimitBytes === 'number' &&
+    Number.isSafeInteger(main.chatRequestLimitBytes) &&
+    main.chatRequestLimitBytes > 0
+  ) {
+    patch.chatRequestLimitBytes = main.chatRequestLimitBytes;
+  }
   const limit = nonNegative(main.chatImageLimit);
   if (limit !== undefined) patch.chatImageLimit = limit;
   // 上界在宿主侧已经把关，这里补一次跨进程读回的判定：脏值只影响显示，不让它流到播放端

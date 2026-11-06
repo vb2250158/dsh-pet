@@ -243,6 +243,10 @@ export const en: Record<Key, string> = {
   modelCatalogFailed:
     'Failed to load the model list (refresh the page to retry); your current values are kept as they are.',
   chatMemory: 'Chat history rounds',
+  chatRequestLimit: 'Request record limit per pet (bytes)',
+  chatRequestLimitHint:
+    'Default: 16 MiB, including failed requests. At the limit, generation pauses for this pet. Clear memory or raise the limit to continue; records are not deleted automatically.',
+  invalidChatRequestLimit: 'The request record limit must be a positive integer in bytes.',
   chatMemoryHint:
     'How many recent rounds each chat request carries (1 round = 1 question + 1 answer; 0 = no history, every message starts fresh). The memory itself keeps everything — this only decides how much goes into the context: higher remembers more and costs more tokens. Global default, shared by every pet (a pet pack may override it in its own kind file).',
   invalidChatMemory: 'Check the chat history rounds: it must be a number ≥ 0.',

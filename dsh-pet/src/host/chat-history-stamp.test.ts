@@ -41,7 +41,13 @@ function textOf(sent: Record<string, unknown>, index: number): string {
 /** 一次对话：history 原样传入，返回实际发给模型的第一条 stream 参数。 */
 async function send(history: ChatMemoryMessage[]): Promise<Record<string, unknown>> {
   const { ctx, options } = fakeCtx();
-  const result = await generateChat({ ctx, system: '人设', history, userText: '鲸鲸，你今天干了什么？' });
+  const result = await generateChat({
+    recordRequest: async () => {},
+    ctx,
+    system: '人设',
+    history,
+    userText: '鲸鲸，你今天干了什么？',
+  });
   assert.equal(result.ok, true, '生成应成功，否则说明假 ctx 没接上');
   return options[0];
 }

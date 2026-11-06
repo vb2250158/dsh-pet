@@ -223,6 +223,10 @@ export const zh = {
   invalidModel: '请检查模型设置：服务商与模型要么都选，要么都留空（跟随当前对话）。',
   modelCatalogFailed: '模型列表加载失败（刷新页面可重试）；当前配置值仍会原样保留。',
   chatMemory: '对话历史条数',
+  chatRequestLimit: '每宠物请求记录上限（字节）',
+  chatRequestLimitHint:
+    '默认16 MiB；包含失败请求。达到上限时停止该宠物本轮生成；清理记忆或提高上限后继续，不自动删除记录。',
+  invalidChatRequestLimit: '请求记录上限必须是正整数字节数。',
   chatMemoryHint:
     '每次对话请求携带的最近历史轮数（1 轮 = 1 问 1 答；0 = 不带历史，每句都是全新对话）。对话记忆本身全存不删，此值只决定截多少进上下文——越大越记得住，也越费 token。全局默认，所有宠物共用（pet pack 可在自己种类文件里单独覆盖）。',
   invalidChatMemory: '请检查对话历史条数：需为 ≥ 0 的数字。',

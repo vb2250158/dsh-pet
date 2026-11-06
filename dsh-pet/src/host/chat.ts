@@ -2,7 +2,7 @@
  * 对话生成（host 半侧）：用 DSH 的 LLM 统一抽象层（ctx.llm）生成一句回复。
  *
  * 负责把历史记忆、用户输入与人设拼成一次生成请求，并解析可选的配图标记。
- * 不负责记忆读写与落盘，也不负责写气泡——那些在路由层与两端消费侧。
+ * 分发前等待记忆拥有者保存最终请求；文件读写和气泡仍由拥有者与消费侧处理。
  * 依赖 ctx.llm、agentDefaultModel（与碎碎念同源）与调用方给的表情包池。
  * 始终成立：候选模型失败要显式回落并留痕；生成失败返回结构化原因，不伪造文案。
  * 契约见 API.md 与 openapi.yaml。
@@ -37,6 +37,20 @@ export interface ChatMemoryMessage {
   /** 该轮 AI 表演的动作名（animations.categories 内的名字）；回放历史时以 `[动作:名称]` 回填。 */
   action?: string;
 }
+
+/** Model-visible chat request, without transport credentials or cancellation state. */
+export interface ChatModelRequest {
+  readonly provider: string;
+  readonly model: string;
+  readonly sessionId: string;
+  readonly messages: Array<ReturnType<typeof createUserMessage> | ReturnType<typeof createAssistantMessage>>;
+  readonly system: string;
+  readonly temperature: number;
+  readonly reasoningEffort?: ReturnType<typeof ReasoningEffortId>;
+}
+
+/** Persistence failure must stop the candidate chain before any model is called. */
+export class ChatRequestRecordingError extends Error {}
 
 /** 单次生成超时（ms）：对话等 LLM 回复，60s 足够。 */
 const TIMEOUT_MS = 60_000;
@@ -96,6 +110,8 @@ function imageInstruction(pool: MemeEntry[]): string {
 
 /** 一次对话生成的输入。 */
 export interface ChatGenerateInput {
+  /** Persist the final request before dispatch; rejection stops generation and fallback. */
+  readonly recordRequest: (request: ChatModelRequest) => Promise<void>;
   /** 宿主上下文（注入 agentDefaultModel / llm）。 */
   readonly ctx: { agentDefaultModel: { currentSelection(): { provider: string; model: string } }; llm?: unknown };
   /** 人设提示词（whisperPrompt，与碎碎念共用同一人设）。 */
@@ -140,7 +156,23 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
   // 兜底文案与失败分支同源，避免两处字面量漂移
   let last: ChatGenerateResult = { ok: false, reason: 'generate-error', message: noTextReason(undefined) };
   for (const [i, sel] of candidates.entries()) {
-    const result = await generateWith(ctx, { llm, sel, system, history, userText, pool, actions, image });
+    let result: ChatGenerateResult;
+    try {
+      result = await generateWith(ctx, {
+        llm,
+        sel,
+        system,
+        history,
+        userText,
+        pool,
+        actions,
+        image,
+        recordRequest: input.recordRequest,
+      });
+    } catch (error) {
+      if (!(error instanceof ChatRequestRecordingError)) throw error;
+      return { ok: false, reason: 'generate-error', message: error.message };
+    }
     if (result.ok) return result;
     last = result;
     // 回落要留痕：配的模型没生效时能在日志里看到原因（否则「我明明配了 A，怎么还是用 B」没法查）
@@ -156,6 +188,7 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
 
 /** 单个候选模型的一次生成请求（候选链的一环）。 */
 interface GenerateOnce {
+  readonly recordRequest: ChatGenerateInput['recordRequest'];
   readonly llm: { stream(o: unknown): AsyncIterable<unknown> };
   readonly sel: ModelRef;
   readonly system: string;
@@ -222,6 +255,22 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
     ...(supportsOff ? { reasoningEffort: ReasoningEffortId('off') } : {}),
     signal: deadline,
   };
+
+  const request: ChatModelRequest = {
+    provider: options.provider,
+    model: options.model,
+    sessionId: options.sessionId,
+    messages: options.messages,
+    system: options.system,
+    temperature: options.temperature,
+    ...(options.reasoningEffort !== undefined ? { reasoningEffort: options.reasoningEffort } : {}),
+  };
+  try {
+    await once.recordRequest(structuredClone(request));
+  } catch (error) {
+    if (error instanceof ChatRequestRecordingError) throw error;
+    throw new ChatRequestRecordingError('对话请求无法保存，未调用模型', { cause: error });
+  }
 
   const assembler = new BlockAssembler();
   try {

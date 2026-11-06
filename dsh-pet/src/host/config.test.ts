@@ -68,6 +68,7 @@ const BASE = {
   },
   whisperPrompt: '你是桌面宠物',
   chatMemoryRounds: 4,
+  chatRequestLimitBytes: 16777216,
   notificationsEnabled: true,
   eventsRefreshSec: { balance: 1800, whisper: 300 },
   workStatusTexts: [['在干活']],
@@ -1042,6 +1043,20 @@ describe('saveUserConfig —— 语音细分开关（白名单 + 透传保留）
   });
 });
 
+describe('请求记录预算的正常配置读写', () => {
+  test('保存和未传时保留既有预算', () => {
+    assert.equal(saveOnce({ pets: PETS, chatRequestLimitBytes: 4096 })?.chatRequestLimitBytes, 4096);
+    assert.equal(saveOnce({ pets: PETS }, { pets: PETS, chatRequestLimitBytes: 8192 })?.chatRequestLimitBytes, 8192);
+    assert.equal('chatRequestLimitBytes' in (saveOnce({ pets: PETS }) ?? {}), false);
+  });
+
+  test('不接受无限制、非整数、非数字或超出安全整数范围的预算', () => {
+    for (const value of [0, -1, 1.5, Infinity, Number.NaN, Number.MAX_SAFE_INTEGER + 1, '4096', null, true, {}]) {
+      assert.equal(saveOnce({ pets: PETS, chatRequestLimitBytes: value }), null);
+    }
+  });
+});
+
 describe('saveUserConfig —— 对话历史条数 chatMemoryRounds（白名单 + 透传保留）', () => {
   test('随请求体写入（设置页「AI 模型与对话上下文」的数字输入框）', () => {
     const out = saveOnce({ pets: PETS, chatMemoryRounds: 9 });
@@ -1328,6 +1343,20 @@ describe('文件宠物条目 —— 全局默认（用户层作基座）+ 种类
       rmSync(dir, { recursive: true, force: true });
     }
   }
+
+  test('请求预算按全局默认继承，种类可覆盖，非法覆盖保留可信预算', () => {
+    assert.equal(merged({ overlay: { chatRequestLimitBytes: 4096 }, pack: PACK }).pig.chatRequestLimitBytes, 4096);
+    assert.equal(
+      merged({ overlay: { chatRequestLimitBytes: 4096 }, pack: { ...PACK, chatRequestLimitBytes: 8192 } }).pig
+        .chatRequestLimitBytes,
+      8192,
+    );
+    assert.equal(
+      merged({ overlay: { chatRequestLimitBytes: 4096 }, pack: { ...PACK, chatRequestLimitBytes: 0 } }).pig
+        .chatRequestLimitBytes,
+      4096,
+    );
+  });
 
   test('用户层写了这些字段 → 种类条目逐个继承（不再只吃内置默认）', () => {
     const out = merged({

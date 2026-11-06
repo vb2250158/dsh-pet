@@ -51,6 +51,8 @@ export interface SaveFields {
   whisperModel: ModelSelection;
   chatModel: ModelSelection;
   chatMemoryRounds: number;
+  /** Per-pet request record budget; omitted by older clients to preserve the existing value. */
+  chatRequestLimitBytes?: number;
   chatImageLimit: number;
   font: FontConfig;
   /** 动作频率权重（main 条目）：三项合计 ≤ 100，随机动作是余量。 */
@@ -89,6 +91,7 @@ export function buildSaveBody(fields: SaveFields): Record<string, unknown> {
     whisperModel: fields.whisperModel,
     chatModel: fields.chatModel,
     chatMemoryRounds: fields.chatMemoryRounds,
+    ...(fields.chatRequestLimitBytes !== undefined ? { chatRequestLimitBytes: fields.chatRequestLimitBytes } : {}),
     chatImageLimit: fields.chatImageLimit,
     font: fields.font,
     animationWeights: fields.animationWeights,

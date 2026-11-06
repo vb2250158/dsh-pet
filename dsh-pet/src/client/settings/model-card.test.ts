@@ -58,6 +58,23 @@ function props(values: ChatFlagValues, over: Record<string, unknown> = {}): Reco
 }
 
 describe('ModelCard —— 对话开关', () => {
+  test('请求字节预算显示实际值、失焦提交数字，忙时禁用', () => {
+    const changes: number[] = [];
+    const inputProps = props(allOff, {
+      chatRequestLimit: 8192,
+      onChatRequestLimitChange: (value: number) => changes.push(value),
+    });
+    const tree = ModelCard(inputProps as never);
+    const input = flatten(tree).find((node) => node.tag === 'input' && node.props.defaultValue === '8192');
+    assert(input);
+    assert.equal(input.props.min, '1');
+    (input.props.onBlur as (event: { target: { value: string } }) => void)({ target: { value: '16384' } });
+    assert.deepEqual(changes, [16384]);
+    const busy = flatten(ModelCard({ ...inputProps, busy: true } as never)).find(
+      (node) => node.tag === 'input' && node.props.defaultValue === '8192',
+    );
+    assert.equal(busy?.props.disabled, true);
+  });
   test('三个开关都在，勾选态来自 values', () => {
     const tree = ModelCard(
       props({ whisperImageEnabled: true, chatImageEnabled: false, chatAnimationEnabled: true }) as never,

@@ -14,6 +14,15 @@ import { DEFAULT_PHYSICS } from '../../../shared/physics.ts';
 import { DEFAULT_FONT } from '../../../shared/fonts.ts';
 
 describe('readMainConfig —— 成品聚合 → 表单补丁', () => {
+  test('请求记录预算读回正整数，非法或缺失时不覆盖已有表单值', () => {
+    assert.equal(readMainConfig({ main: { pets: [], chatRequestLimitBytes: 4096 } })?.chatRequestLimitBytes, 4096);
+    for (const value of [0, -1, 0.5, Number.MAX_SAFE_INTEGER + 1, '4096', undefined]) {
+      assert.equal(
+        readMainConfig({ main: { pets: [], chatRequestLimitBytes: value } })?.chatRequestLimitBytes,
+        undefined,
+      );
+    }
+  });
   test('main.pets 缺失或不是数组：返回 null（响应坏了）', () => {
     assert.equal(readMainConfig({}), null);
     assert.equal(readMainConfig({ main: {} }), null);

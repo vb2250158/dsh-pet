@@ -6,9 +6,9 @@
  * @module dsh-pet/src/host/plugin/chat-memory
  */
 import { join } from 'node:path';
-import { generateChat, type ChatMemoryMessage } from '../chat.ts';
+import { ChatRequestRecordingError, generateChat, type ChatMemoryMessage, type ChatModelRequest } from '../chat.ts';
 import { chatActionNames } from '../chat-action.ts';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { composeSystemPrompt, petPersona } from '../persona.ts';
 import { findPetInstance, readAllConfig, removeRoundsByTs, sliceMemoryRounds } from '../config.ts';
 import type { PetImageRef } from '../image-attachment.ts';
@@ -29,6 +29,33 @@ import {
 
 /** 第三方召回的硬超时（ms）：到点按“不修改内容”继续生成，不拖住这一轮对话。 */
 const RECALL_TIMEOUT_MS = 1500;
+
+/** A durable model attempt; successful attempts share the displayed turn's timestamp. */
+interface ChatRequestRecord {
+  version: 1;
+  time: number;
+  turnTs?: number;
+  request: ChatModelRequest;
+}
+
+/** Existing message-only entries remain readable without migration. */
+interface ChatMemoryEntry {
+  messages: ChatMemoryMessage[];
+  requests?: ChatRequestRecord[];
+}
+
+type MemoryFile = Record<string, Record<string, ChatMemoryEntry>>;
+
+/** Measure the request array's actual UTF-8 bytes at memory.json's existing nesting and indentation. */
+function requestStorageBytes(requests: readonly ChatRequestRecord[]): number {
+  const nested = { entry: { pet: { requests } } };
+  const empty = { entry: { pet: { requests: [] } } };
+  return (
+    Buffer.byteLength(JSON.stringify(nested, null, 2), 'utf8') -
+    Buffer.byteLength(JSON.stringify(empty, null, 2), 'utf8') +
+    2
+  );
+}
 
 /** 校验召回补丁里的历史项：形状不对的整段丢弃，避免坏数据把生成打崩。 */
 function isChatTurn(value: unknown): value is ChatTurn {
@@ -69,14 +96,14 @@ export function createChatMemory(deps: ChatMemoryInput) {
   const lastWhisperAt = new Map<string, number>();
 
   // 对话记忆文件（唯一读写方 = 本进程；浏览器/桌面两端都只是客户端 → 同一实例天然共享同一份记忆）。
-  // 结构双层：{ <种类桶 assetRoot ?? petId>: { <实例 id>: { messages: ChatMemoryMessage[] } } }
+  // 结构双层：种类桶 → 实例 → messages 与可选 requests；旧版仅有 messages 的叶子仍可读取。
   const memoryPath = join(userRoot, 'memory.json');
 
   // 对话写操作串行队列：read-modify-write 排队执行，防两端同时对话时交错写盘
   let chatQueue: Promise<void> = Promise.resolve();
 
   /** 读记忆文件：不存在 → 空；解析失败/根不是对象 → 记日志 + 空记忆（不备份、不改写源文件） */
-  const readMemory = async (): Promise<Record<string, Record<string, { messages: ChatMemoryMessage[] }>>> => {
+  const readMemory = async (): Promise<MemoryFile> => {
     let raw: string;
     try {
       raw = await readFile(memoryPath, 'utf8');
@@ -86,7 +113,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     try {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
-      return parsed as Record<string, Record<string, { messages: ChatMemoryMessage[] }>>;
+      return parsed as MemoryFile;
     } catch (e) {
       log.error(
         `dsh-pet: 记忆文件无法解析（对话将从头开始）：${memoryPath}（${e instanceof Error ? e.message : String(e)}）`,
@@ -95,9 +122,11 @@ export function createChatMemory(deps: ChatMemoryInput) {
     }
   };
 
-  const writeMemory = async (mem: Record<string, Record<string, { messages: ChatMemoryMessage[] }>>): Promise<void> => {
+  const writeMemory = async (mem: MemoryFile): Promise<void> => {
     await mkdir(userRoot, { recursive: true });
-    await writeFile(memoryPath, JSON.stringify(mem, null, 2), 'utf8');
+    const temporaryPath = memoryPath + '.tmp';
+    await writeFile(temporaryPath, JSON.stringify(mem, null, 2), 'utf8');
+    await rename(temporaryPath, memoryPath);
   };
 
   /** 把一次读写封进串行队列（同进程内防交错），返回 fn 的结果 */
@@ -351,7 +380,28 @@ export function createChatMemory(deps: ChatMemoryInput) {
         userText: text,
       });
       // 模型：条目配置的 chatModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
+      const attempts: ChatRequestRecord[] = [];
       const generated = await generateChat({
+        recordRequest: async (request) => {
+          const record: ChatRequestRecord = { version: 1, time: Date.now(), request };
+          const requests = [...(entry.requests ?? []), record];
+          const pending = new Set([...attempts, record]);
+          const reserved = requests.map((item) =>
+            pending.has(item) ? { ...item, turnTs: Number.MAX_SAFE_INTEGER } : item,
+          );
+          const limit = Number(found.conf.chatRequestLimitBytes);
+          if (!Number.isSafeInteger(limit) || limit <= 0) {
+            throw new ChatRequestRecordingError('chatRequestLimitBytes 必须是正整数字节数，未调用模型');
+          }
+          if (requestStorageBytes(reserved) > limit) {
+            throw new ChatRequestRecordingError(
+              `该宠物的请求记录超过 ${limit} 字节，未调用模型；请清理对话记忆或提高 chatRequestLimitBytes`,
+            );
+          }
+          entry.requests = requests;
+          await writeMemory(mem);
+          attempts.push(record);
+        },
         ctx,
         system: patch?.system ?? system,
         history: patch?.history ?? list,
@@ -363,6 +413,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
       });
       if (!generated.ok) return generated;
       const now = Date.now();
+      for (const attempt of attempts) attempt.turnTs = now;
       // 用户上传的图只存不送：记忆要能还原「这一轮带过图」（聊天记录存档），但不把图本体重发给模型；
       // AI 配的图只回填名称标记（见 chat.ts 的 historyMarkersOf），同样不带图本体。
       entry.messages.push({ role: 'user', content: text, ts: now, ...(image ? { image } : {}) });
@@ -424,10 +475,17 @@ export function createChatMemory(deps: ChatMemoryInput) {
       const list = Array.isArray(before) ? before : [];
       const kept = ts === undefined ? [] : removeRoundsByTs(list, ts).messages;
       const removed = list.length - kept.length;
-      if (removed > 0) {
-        const leaf = byPet?.[petId];
-        if (kept.length > 0 && leaf !== undefined) {
+      const leaf = byPet?.[petId];
+      const requests = leaf?.requests ?? [];
+      const removedTurns = new Set(ts);
+      const keptRequests =
+        ts === undefined
+          ? []
+          : requests.filter((record) => record.turnTs === undefined || !removedTurns.has(record.turnTs));
+      if (removed > 0 || requests.length !== keptRequests.length || (ts === undefined && leaf !== undefined)) {
+        if ((kept.length > 0 || keptRequests.length > 0) && leaf !== undefined) {
           leaf.messages = kept;
+          if (leaf.requests !== undefined) leaf.requests = keptRequests;
         } else if (byPet !== undefined) {
           // 清空（或本来就只剩坏数据）：摘掉宠物叶子；条目空了连条目一起摘
           delete byPet[petId];

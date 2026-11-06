@@ -245,6 +245,10 @@ export const pt: Record<Key, string> = {
   modelCatalogFailed:
     'Falha ao carregar a lista de modelos (atualize a página para tentar de novo); os valores atuais são mantidos como estão.',
   chatMemory: 'Rodadas de histórico',
+  chatRequestLimit: 'Limite de registros por mascote (bytes)',
+  chatRequestLimitHint:
+    'Padrão: 16 MiB, incluindo solicitações com falha. No limite, a geração deste mascote é pausada. Limpe a memória ou aumente o limite; nenhum registro é apagado automaticamente.',
+  invalidChatRequestLimit: 'O limite deve ser um número inteiro positivo de bytes.',
   chatMemoryHint:
     'Quantas rodadas recentes cada pedido de conversa carrega (1 rodada = 1 pergunta + 1 resposta; 0 = sem histórico, cada mensagem começa do zero). A memória em si guarda tudo — isto só decide quanto entra no contexto: mais memória, mais tokens. Padrão global, compartilhado por todos os pets (um pet pack pode sobrescrever no arquivo do próprio tipo).',
   invalidChatMemory: 'Revise as rodadas de histórico: precisa ser um número ≥ 0.',

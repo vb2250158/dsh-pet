@@ -10,7 +10,13 @@ import type { FontConfig, ModelSelection, Pet, PhysicsParams } from '../../../sh
 
 /** 校验失败时返回的文案键。 */
 export type InvalidKey =
-  'invalid' | 'invalidPhysics' | 'invalidModel' | 'invalidChatMemory' | 'invalidChatImageLimit' | 'invalidFont';
+  | 'invalid'
+  | 'invalidPhysics'
+  | 'invalidModel'
+  | 'invalidChatMemory'
+  | 'invalidChatRequestLimit'
+  | 'invalidChatImageLimit'
+  | 'invalidFont';
 
 /** 保存前要校验的全部表单值。 */
 export interface FormValues {
@@ -19,6 +25,8 @@ export interface FormValues {
   whisperModel: ModelSelection;
   chatModel: ModelSelection;
   chatMemory: number;
+  /** Omitted by older clients; when present it must be a positive safe integer. */
+  chatRequestLimitBytes?: number;
   chatImageLimit: number;
   font: FontConfig;
 }
@@ -66,6 +74,11 @@ export function validateForm(values: FormValues): InvalidKey | null {
   // 只填一半（选了服务商没选模型，或反之）非法。
   if (!modelPairValid(values.whisperModel) || !modelPairValid(values.chatModel)) return 'invalidModel';
   if (!Number.isFinite(values.chatMemory) || values.chatMemory < 0) return 'invalidChatMemory';
+  if (
+    values.chatRequestLimitBytes !== undefined &&
+    (!Number.isSafeInteger(values.chatRequestLimitBytes) || values.chatRequestLimitBytes <= 0)
+  )
+    return 'invalidChatRequestLimit';
   // 0 = 不限制，合法。
   if (!Number.isFinite(values.chatImageLimit) || values.chatImageLimit < 0) return 'invalidChatImageLimit';
   if (!fontValid(values.font)) return 'invalidFont';
