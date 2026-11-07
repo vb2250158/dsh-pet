@@ -16,7 +16,7 @@ info:
     - `servers` 里的 `http://127.0.0.1:{port}` 是占位——`{port}` 就是 `ctx.webServer.port`，
       也就是 `dsh web` 启动时打印的地址（未显式指定端口时默认 3080）。
       插件本身不固定监听端口，只往宿主的 Web 服务上挂路由。
-    - 只监听 **127.0.0.1**，不对外网暴露，也**没有任何鉴权**：任何能访问本机该端口的进程都能调用。
+    - 敏感接口（状态、助手导航、聊天、语音、附件及待办）使用 DSH Host 认证与 Host/Origin 检查。
       请勿把该端口转发/代理到公网。
     - 桌面半侧不走 HTTP，而是 `dsh-pet-bridge://` 自定义 scheme 经主进程管道转发到**同一个**
       `handlePetRoute`。所以下表所有路径对两端行为完全一致。
@@ -98,11 +98,31 @@ tags:
     description: 语音合成——参数校验、排队与缓存都在宿主，成功时直接返回 mp3 文件
 
 paths:
+  /dsh-pet-7340/assistant-entry:
+    get:
+      tags: [State]
+      operationId: getAssistantEntry
+      summary: 查询同宿主助手 GUI 导航能力
+      description: 需要 DSH Host 认证及 Host/Origin 检查；桌面私有桥复用同一处理器。不触发模型或麦克风。
+      responses:
+        '200':
+          description: 当前导航能力
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [available, protocol, path]
+                properties:
+                  available: { type: boolean }
+                  protocol: { const: 1 }
+                  path: { const: '/?voice-assistant=1' }
+        '401': { description: 尚未通过宿主认证 }
+        '403': { description: Host 或 Origin 被拒绝 }
   /dsh-pet-7340/state:
     get:
       tags: [State]
       operationId: getState
-      summary: 拉取统一状态 S
+      summary: 拉取统一状态 S（需要宿主认证）
       description: |
         返回宿主内存中的已发布状态 S，形状固定为：
 
@@ -417,7 +437,7 @@ paths:
         桌宠气泡，桌宠就成了那套人格的实体。
 
         文本写进 `pets.<id>.say` —— 与碎碎念、对话回复**同一个叶子**，因此浏览器与桌面两端
-        在 1 秒内自动显示，**消费端无需改动**。这是动作端点，只回 `{ ok }`，文本本身从
+        在 1 秒内自动显示，**消费端无需改动**。这是动作端点，成功回 `{ ok: true, counter }`（本次 say 叶子版本），文本本身从
         `/state` 读。
 
         **校验**（任何一条不通过都返回 HTTP 200 + `ok: false`，与 `POST /chat` 口径一致）：
@@ -565,11 +585,23 @@ paths:
         **占用门禁**（issue #122 第 4 项）：当前有占用时，只有持锁者（带对的 `?lock=`）能清——
         否则第三方一调就把别人的气泡抹了。**没有占用时这一步恒放行**，行为与改造前逐字一致。
 
-        **无请求体。** 动作端点，只回 `{ ok }`；要确认效果请读 `/state` 的 `pets.<id>.say`。
+        可选请求体 `{ "expectedCounter": 版本号 }`：写入前比较当前 say 叶子版本，匹配返回 `{ok:true,cleared:true}`；不匹配返回 `{ok:true,cleared:false}`，不写入。省略请求体保留原 `{ok:true}` 无条件清理语义；认证与占用检查仍然生效。
       parameters:
         - $ref: "#/components/parameters/PetIdQuery"
         - $ref: "#/components/parameters/LockQuery"
         - $ref: "#/components/parameters/SurfaceQuery"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expectedCounter:
+                  type: integer
+                  minimum: 0
+                  maximum: 9007199254740991
+                  description: 仅在当前 say 叶子版本匹配时清空。
       responses:
         "200":
           description: |

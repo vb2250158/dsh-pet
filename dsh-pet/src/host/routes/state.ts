@@ -15,6 +15,12 @@ import { failResult, invalidJson, methodNotAllowed, okResult, payloadTooLarge } 
 export async function handleStateRoutes(deps: PetRouteDeps, input: RouteInput): Promise<RouteResult | undefined> {
   const { EXTERNAL_WORK_SESSION, ctx, nextExternalWorkSeq, publishWorkStatus, state, workStatus } = deps;
   const { body, method, rest, signal, url } = input;
+  if (rest === 'assistant-entry') {
+    if (method !== 'GET') return methodNotAllowed();
+    return okResult(deps.assistantEntry?.() ?? { available: false, protocol: 1, path: '/?voice-assistant=1' }, {
+      'cache-control': 'no-store',
+    });
+  }
 
   // 可选模型清单（设置页「AI 模型」下拉框数据源）：与 DSH 模型选择器同源，都来自宿主 llm 服务。
   // 只读、无副作用；某个服务商列模型失败（适配器不支持 / 网络）只让它空着，不拖垮整张清单。

@@ -39,3 +39,11 @@ dsh-pet 提供两个 Cordis 服务：页面内的 `petApi7340`（浏览器半侧
 - [`CORDIS.md`](CORDIS.md) —— 完整契约：参数、返回字段、边界与示例
 - [`API.md`](API.md) / [`openapi.yaml`](openapi.yaml) —— 同一个插件的 HTTP 一侧
 - [`tools/cordis-probe`](tools/cordis-probe/README.md) —— 同页第三方插件的示例：自动列出 dsh-pet 的服务与成员，可直接调用
+
+## 可选助手显示服务（0.4.5-fork.3）
+
+Host 通过公开的 `ctx.inject(['petAssistantPresenter'], ...)` 获取可选服务。缺失、卸载或版本不兼容只关闭展示，不应停止助手会话和语音。`protocol` 为 1；`packageVersion` 为实际加载版本；`listPets()` 返回可选择的 id/name，不自动替用户选择。
+
+`attach()` 返回独占显示租约：`present({petId,text,bubbles,animation})`、`clear()`、`dispose()`。表现复用现有 broadcast/bubble-clear 判定和占用锁；不接收工具、模型或音频参数，不设置 voiceTo。调用方在卸载时 await dispose；迟到结果不得清掉其他写者的新气泡。
+
+客户端通过可选 `dshAssistant.open()` 打开已存在的助手 GUI。桌面端通过认证的 `GET /dsh-pet-7340/assistant-entry` 检查能力，只接受协议 1 和固定路径 `/?voice-assistant=1`。打开和关闭 GUI 均不代表开启或停止语音。

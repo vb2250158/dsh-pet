@@ -5,7 +5,7 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 完整契约——参数、响应体、字段含义、错误码与示例——见根目录的 [`openapi.yaml`](openapi.yaml)。
 
 - **基址**：`http://127.0.0.1:<port>/dsh-pet-7340`，`<port>` 是 DSH Web 服务实际监听的端口
-- **只监听 127.0.0.1，且没有鉴权**：任何能访问本机该端口的进程都能调用，请勿转发到公网
+- **敏感接口使用宿主认证与 Host/Origin 检查**：包括状态、助手导航、聊天、语音、附件和待办；其他展示控制接口仍按现有合同开放，不要将端口转发到公网
 
 ---
 
@@ -189,3 +189,9 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
   可直观试用上述接口（用 `node tools/api-tester.cjs` 启动，它会带上本地代理解决跨域）
 
 语音识别在调用方取消或 30 秒预算到期时停止等待，即使第三方实现忽略 AbortSignal；取消前已结束的识别不会保留计时器或取消监听。DSH_PET_USER_DATA_DIR 显式目录不可写时报告原始错误，不把用户切换到其它 profile。此 fork 保留点击音效和宠物互撞默认关闭，已有配置仍按原值生效。
+
+## 助手入口（0.4.5-fork.3）
+
+`GET /assistant-entry` 返回 `{available, protocol:1, path:"/?voice-assistant=1"}`，只提供导航能力，不接受任务命令。与 `GET /state` 一样需通过 DSH Host 认证；桌面端由私有管道访问同一个处理器。
+
+`POST /broadcast` 成功响应新增 `counter`（本次 say 叶子版本）。显示租约可向 `POST /bubble/clear?pet=...` 发送 `{ "expectedCounter": counter }`，宿主在写入清空指令前比较 say 叶子版本；匹配返回 `{ok:true,cleared:true}`，已被新内容覆盖则返回 `{ok:true,cleared:false}`，不清理新内容。省略请求体保留旧的无条件清理语义。counter 不是授权令牌，原认证与占用检查仍生效。

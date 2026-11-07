@@ -147,6 +147,7 @@ export async function handleInteractionRoutes(deps: PetRouteDeps, input: RouteIn
       // both / any 不足以指定一端，留空不写（消费端据此不念）。
       const want = normalizeSurface(url.searchParams.get('surface'));
       const voiceTo = want === null ? undefined : voiceTargetOfSurface(want);
+      input.signal?.throwIfAborted();
       state.writePet(d.petId, 'say', {
         text: d.text,
         ...pic,
@@ -154,7 +155,7 @@ export async function handleInteractionRoutes(deps: PetRouteDeps, input: RouteIn
         anim: d.anim,
         ...(voiceTo ? { voiceTo } : {}),
       });
-      return okResult({ ok: true });
+      return okResult({ ok: true, counter: state.read().pets[d.petId]?.say.counter });
     } catch (e) {
       // 配置读取失败等（安装损坏）→ 显式失败，不静默
       return failResult('generate-error', e instanceof Error ? e.message : String(e));
@@ -167,6 +168,20 @@ export async function handleInteractionRoutes(deps: PetRouteDeps, input: RouteIn
   // 幂等：没有气泡也回 {ok:true}。
   if (rest === 'bubble/clear') {
     if (method !== 'POST') return methodNotAllowed();
+    let expectedCounter: number | undefined;
+    if (body) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        return invalidJson();
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return invalidJson();
+      const value = (parsed as { expectedCounter?: unknown }).expectedCounter;
+      if (value !== undefined && (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0))
+        return failResult('bad-request', 'expectedCounter must be a non-negative safe integer');
+      expectedCounter = value as number | undefined;
+    }
     try {
       const cfg = readAllConfig(configPaths);
       const d = decideBubbleClear({
@@ -178,8 +193,12 @@ export async function handleInteractionRoutes(deps: PetRouteDeps, input: RouteIn
       if (noSurface) return noSurface;
       const blocked = lockBlocked(d.petId, url.searchParams);
       if (blocked) return blocked;
+      // Compare and clear in one synchronous segment after all routing/lock checks.
+      if (expectedCounter !== undefined && state.read().pets[d.petId]?.say.counter !== expectedCounter)
+        return okResult({ ok: true, cleared: false });
+      input.signal?.throwIfAborted();
       state.writePet(d.petId, 'say', { clear: true });
-      return okResult({ ok: true });
+      return okResult(expectedCounter === undefined ? { ok: true } : { ok: true, cleared: true });
     } catch (e) {
       return failResult('generate-error', e instanceof Error ? e.message : String(e));
     }

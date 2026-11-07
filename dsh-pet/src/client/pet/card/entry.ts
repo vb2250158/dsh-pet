@@ -12,6 +12,7 @@ import {
   type ChatDialogMount,
   type EncodedImage,
 } from '../../../shared/chat/index.ts';
+import { hasAssistantEntry, openAssistantEntry } from '../../assistant-entry.ts';
 import { captureDisplayFrame } from '../../../shared/chat/capture.ts';
 import { displayOfHotkey } from '../../../shared/display-hotkey.ts';
 import { SLEEP_HOTKEY_HINT, isSleepHotkey } from '../../../shared/sleep-hotkey.ts';
@@ -139,6 +140,7 @@ export function createCardEntry(rt: CardEntryRuntime) {
 
     /** 挂载对话弹窗：弹窗贴在身体命中区右上角，视频框右上角不等于宠物右上角；超出视口夹回。 */
     const mountChat = (seed: { image?: File; encoded?: EncodedImage }): void => {
+      if (!seed.image && !seed.encoded && openAssistantEntry()) return;
       if (chatRef.current) chatRef.current.close();
       const hitRect = stage()?.querySelector('.dsh-pet-hit')?.getBoundingClientRect();
       chatRef.current = mountChatDialog({
@@ -357,7 +359,7 @@ export function createCardEntry(rt: CardEntryRuntime) {
         { label: '查看余额', action: 'show-balance' },
         { label: '待办事项', action: 'todo', hint: TODO_HOTKEY_HINT },
         { label: '碎碎念', action: 'whisper' },
-        { label: '对话', action: 'chat', hint: CHAT_HOTKEY_HINT },
+        { label: hasAssistantEntry() ? '开始聊天' : '对话', action: 'chat', hint: CHAT_HOTKEY_HINT },
         ...(memes ? [memes] : []),
         ...(canSleep ? [sleepItem] : []),
       ];

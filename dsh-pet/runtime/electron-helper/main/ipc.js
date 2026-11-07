@@ -17,7 +17,7 @@ const { decideWindowIgnore } = require('../pointer-target.js');
  * @param deps.openTarget - 菜单首项的去向：desktop 唤起桌面应用；其余形态交给默认浏览器打开已鉴权地址。
  * @param deps.petRoute - 宠物路由前缀。
  */
-function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
+function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute, siteOrigin }) {
   // 宠物窗口跟随：renderer 逐帧上报窗口内容区位置/尺寸
   ipcMain.on('pet:set-bounds', (event, bounds) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -140,7 +140,13 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
     const authed = process.env.DSH_PET_SITE_URL || '';
     if (/^https?:[/][/]/.test(authed)) {
       try {
-        if (new URL(authed).origin === new URL(url).origin) target = authed;
+        if (new URL(authed).origin === new URL(url).origin) {
+          const authenticated = new URL(authed);
+          // Keep the Host login token on its original origin; copy only this fixed navigation intent.
+          if (new URL(url).searchParams.get('voice-assistant') === '1')
+            authenticated.searchParams.set('voice-assistant', '1');
+          target = authenticated.href;
+        }
       } catch {
         /* 形状不对：保持裸地址（原行为） */
       }
@@ -157,9 +163,25 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
   // 去向由宿主形态决定：desktop 把主窗口叫回前台，比 spawn 宿主 exe 干净；site 则是原行为：
   // 系统默认浏览器打开站点。
   ipcMain.on('pet:open-site', (event, payload) => {
-    const url = payload && typeof payload === 'object' ? String(payload.url || '') : '';
-    if (!/^https?:[/][/]/.test(url)) return;
-    if (openTarget === 'desktop') {
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    if (!owner || owner.isDestroyed() || ![...petWindows.state.windows.values()].includes(owner)) return;
+    let parsed;
+    try {
+      parsed = new URL(payload && typeof payload === 'object' ? String(payload.url || '') : '');
+    } catch {
+      return;
+    }
+    if (
+      !['http:', 'https:'].includes(parsed.protocol) ||
+      parsed.origin !== siteOrigin ||
+      parsed.username ||
+      parsed.password ||
+      parsed.hash ||
+      parsed.pathname !== '/'
+    )
+      return;
+    const url = parsed.href;
+    if (openTarget === 'desktop' && parsed.searchParams.get('voice-assistant') !== '1') {
       // 协议未注册（绿色版 / 注册表被清）时回落成打开站点，至少不是"点了没反应"
       focusDesktopApp().catch((error) => {
         console.error('[dsh-pet-desktop-helper] open dsh:// failed, falling back to site:', error);

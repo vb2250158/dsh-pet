@@ -5,6 +5,7 @@
  * 任何可选能力缺失都只降级功能，绝不让整个插件加载失败。
  * @module dsh-pet/src/client/app
  */
+import { installAssistantEntry } from './assistant-entry.ts';
 import { makePetUI } from './pet.ts';
 import { readPose } from './pose.ts';
 import { readProgress } from './progress.ts';
@@ -71,6 +72,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     const inject = ['slots', 'locale', 'connection', 'remote', 'remote.commands', 'commandUi'];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入的 ctx（locale/slots/webServer 等 service 无静态类型）
     function apply(ctx: any) {
+      installAssistantEntry(ctx);
       // 设置页文案字典。
       ctx.effect(() => ctx.locale.register(NS, dicts), 'dsh-pet: dictionaries');
       const t = ctx.locale.bind(NS);

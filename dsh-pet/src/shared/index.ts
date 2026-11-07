@@ -31,3 +31,5 @@ export * from './todo/index.ts';
 export * from './tooltip.ts';
 export * from './typography.ts';
 export * from './voice.ts';
+
+export * from './assistant-navigation.ts';

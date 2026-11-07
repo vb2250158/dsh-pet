@@ -86,6 +86,8 @@ export function registerHttpRoute(ctx: HostContext, handlePetRoute: HttpRouteHan
             const privatePath = decodeURIComponent(pathname).slice(ROUTE_SEGMENT.length);
             if (
               [
+                '/state',
+                '/assistant-entry',
                 '/attachment',
                 '/voice/voices',
                 '/voice/speak',

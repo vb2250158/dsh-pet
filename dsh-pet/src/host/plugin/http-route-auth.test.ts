@@ -6,6 +6,9 @@ import { test } from 'node:test';
 import { registerHttpRoute } from './http-route.ts';
 
 for (const [path, method] of [
+  ['state', 'GET'],
+  ['%73tate', 'GET'],
+  ['assistant-entry', 'GET'],
   ['%61ttachment?id=sha256:fixture', 'GET'],
   ['voice/voices', 'GET'],
   ['voice/speak', 'GET'],

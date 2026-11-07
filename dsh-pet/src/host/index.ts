@@ -3,6 +3,7 @@
  * 装配顺序不能改：`getHandlePetRoute` 惰性取用（`httpRoute` 在本函数后段才创建），`startHelper` 必须最后调用。
  * @module dsh-pet/src/host/index
  */
+import { createAssistantPresenter } from './assistant-presenter.ts';
 import { createHostSetup } from './plugin/setup.ts';
 import { readAllConfig } from './config.ts';
 import { createHttpRoute, registerHttpRoute } from './plugin/http-route.ts';
@@ -104,6 +105,7 @@ export function apply(ctx: any): void {
     ...desktopHelper,
     ...sessionNotify,
     ctx,
+    assistantEntry: () => assistantPresenter.entry(),
     todos,
     // 语音合成：缓存落 userRoot，失败只留日志，不打断宿主
     voice: createVoiceService({ userRoot, log }),
@@ -111,6 +113,13 @@ export function apply(ctx: any): void {
     speech: createHearService({ speechToText: () => setup.optionalService('speechToText') }),
   };
   const httpRoute = createHttpRoute(deps);
+  const assistantPresenter = createAssistantPresenter({
+    state,
+    listPets: effectivePetList,
+    route: httpRoute.handlePetRoute,
+  });
+  ctx.provide('petAssistantPresenter', assistantPresenter);
+  ctx.effect(() => () => assistantPresenter.dispose(), 'dsh-pet: assistant presenter');
   registerHttpRoute(ctx, httpRoute.handlePetRoute);
 
   registerSessionWatch({

@@ -34,7 +34,7 @@ Object.assign(PetSprite.prototype, {
       // 「待办事项」是待办面板的唯一入口（单击宠物不再弹面板），排在余额之后。
       { label: '待办事项', action: 'todo', hint: S.TODO_HOTKEY_HINT },
       { label: '碎碎念', action: 'whisper' },
-      { label: '对话', action: 'chat', hint: S.CHAT_HOTKEY_HINT },
+      { label: '开始聊天', action: 'chat', hint: S.CHAT_HOTKEY_HINT },
     ];
     // 「配图」：与浏览器端同一份分支（纳入对话的配图 / 其他），点一张就用它说一句；没有可用图时
     // 返回 null，整项不出现。数据来自拍平层吹入的条目级字段（this.pet.memes / chatImageEnabled /
@@ -269,7 +269,24 @@ Object.assign(PetSprite.prototype, {
     this.showChatFromMenu(undefined, encoded);
   },
 
-  showChatFromMenu(image, encoded) {
+  async showChatFromMenu(image, encoded) {
+    if (!image && !encoded) {
+      try {
+        if (
+          await S.openResidentAssistant({
+            baseUrl: BASE,
+            open: (path) => {
+              if (!window.petBridge) throw new Error('ASSISTANT_ENTRY_UNAVAILABLE');
+              window.petBridge.openDshSite(ORIGIN + path);
+            },
+          })
+        )
+          return;
+      } catch (error) {
+        console.warn('[dsh-pet] 语音助手入口暂不可用', error);
+        return;
+      }
+    }
     if (this.chatMount) {
       this.chatMount.close();
       this.chatMount = null;
