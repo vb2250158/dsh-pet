@@ -22,7 +22,7 @@ export function createAssistantPresenter(deps: {
   const entry = () => ({ available: !closed && !!active, protocol: 1, path: '/?voice-assistant=1' });
   return {
     protocol: 1,
-    packageVersion: '0.4.5-fork.3',
+    packageVersion: '0.4.5-fork.4',
     entry,
     listPets: () => deps.listPets().map((pet) => ({ id: String(pet.id), name: String(pet.name || pet.id) })),
     attach() {

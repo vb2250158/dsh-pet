@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet",
-  "version": "0.4.5-fork.3",
+  "version": "0.4.5-fork.4",
   "description": "吃白饭的蓝色大肥鱼，赖在 DeepSeek Harness 里不走了。平时爱玩魔方、爱吃各种零食、偶尔打个盹，闲不住就在桌面上溜达两圈，被你拖来甩去也照旧赖着；你忙起来它跟着忙前忙后，也会帮你打理余额钱包，闲下来爱碎碎念，还乐意陪你唠两句。",
   "icon": "assets/logo.png",
   "keywords": [
@@ -132,15 +132,15 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4 || 4.0.5-alpha.1 || 4.0.5-alpha.2 || 4.0.6-alpha.1 || 4.0.6-alpha.2",
-    "@deepseek-ai/dsh-agent-default-model": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3",
-    "@deepseek-ai/dsh-client-connection": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3",
-    "@deepseek-ai/dsh-client-ui-primitives": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3",
-    "@deepseek-ai/dsh-commands": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3",
-    "@deepseek-ai/dsh-credentials": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3",
-    "@deepseek-ai/dsh-home-paths": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3",
-    "@deepseek-ai/dsh-host-webserver": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3",
-    "@deepseek-ai/dsh-llm": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3",
+    "@deepseek-ai/dsh-agent-default-model": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-connection": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-commands": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-credentials": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-home-paths": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3 || 0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": "^0.2.0-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3 || 0.2.2-alpha.2 || 0.2.2-alpha.3 || 0.2.2-rc.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

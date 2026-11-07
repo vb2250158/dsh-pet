@@ -13,9 +13,13 @@
     "pnpm": "11.28.5"
   },
   "candidate": {
-    "pluginVersion": "0.4.5-fork.2",
-    "status": "Request-persistence source candidate; current RC1 runtime combination and formal installation remain pending",
-    "upstreamCommit": "60bb2eb4113eca92b2636ab906f8e6c9c934ae13"
+    "pluginVersion": "0.4.5-fork.4",
+    "status": "Explicit RC1 peer declarations; official fixed-Git combination install and runtime pending",
+    "upstreamCommit": "60bb2eb4113eca92b2636ab906f8e6c9c934ae13",
+    "coreCandidate": {
+      "version": "0.2.2-rc.1",
+      "commit": "c257e48b257e9688ffe18bb711b6a32c6091a863"
+    }
   },
   "packagingCandidate": {
     "pluginVersion": "0.4.3-fork.2",
@@ -28,7 +32,11 @@
   },
   "compatibilityMatrix": false,
   "requestPersistenceValidation": {
-    "focusedTests": { "passed": 446, "failed": 0, "skipped": 0 },
+    "focusedTests": {
+      "passed": 446,
+      "failed": 0,
+      "skipped": 0
+    },
     "requestBudgetDefaultBytes": 16777216,
     "sourceBuild": true,
     "typecheck": true,
