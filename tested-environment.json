@@ -13,12 +13,13 @@
     "pnpm": "11.28.5"
   },
   "candidate": {
-    "pluginVersion": "0.4.5-fork.4",
-    "status": "Explicit RC1 peer declarations; official fixed-Git combination install and runtime pending",
-    "upstreamCommit": "60bb2eb4113eca92b2636ab906f8e6c9c934ae13",
+    "pluginVersion": "0.4.5-fork.5",
+    "status": "Focused source lifecycle tests and Host/Web/helper JavaScript build; fixed Git combination and UI pending",
+    "upstreamCommit": "be4536da0ca71947058777d904874977ab9ab841",
+    "integration": "Selected Web voice/overlay commits; keep fork memory and assistant changes; exclude release-only and unrelated Desktop/macOS changes",
     "coreCandidate": {
       "version": "0.2.2-rc.1",
-      "commit": "c257e48b257e9688ffe18bb711b6a32c6091a863"
+      "commit": "955ba060b3bfa9908cb3ea4da63ff580f51beb72"
     }
   },
   "packagingCandidate": {

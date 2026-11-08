@@ -5,6 +5,7 @@
  * 任何可选能力缺失都只降级功能，绝不让整个插件加载失败。
  * @module dsh-pet/src/client/app
  */
+import { mountVoiceLifecycle } from '../shared/voice.ts';
 import { installAssistantEntry } from './assistant-entry.ts';
 import { makePetUI } from './pet.ts';
 import { readPose } from './pose.ts';
@@ -14,6 +15,7 @@ import { getStateSnapshot } from './state-service.ts';
 import { dicts, makePetConfigSection, NS, petBridge } from './settings.ts';
 import { initNotify } from './notify.ts';
 import { mountBaifan } from './baifan.ts';
+import { makeBaifanLayer } from './baifan/layer.ts';
 import { installCommandFaces, type CommandFace, type CommandUiLike } from './command-faces.ts';
 import { installSectionNavIcon } from './nav-icon.ts';
 import { registerPetChatTab, openPetChatTab } from './chat/register.ts';
@@ -72,6 +74,7 @@ export function makeFactory(): (require: (mod: string) => any) => any {
     const inject = ['slots', 'locale', 'connection', 'remote', 'remote.commands', 'commandUi'];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DSH 注入的 ctx（locale/slots/webServer 等 service 无静态类型）
     function apply(ctx: any) {
+      ctx.effect(() => mountVoiceLifecycle(), 'dsh-pet: voice playback');
       installAssistantEntry(ctx);
       // 设置页文案字典。
       ctx.effect(() => ctx.locale.register(NS, dicts), 'dsh-pet: dictionaries');
@@ -91,8 +94,12 @@ export function makeFactory(): (require: (mod: string) => any) => any {
         progress: readProgress,
       });
 
-      // 内置玩法「吃白饭」：注册走 HTTP，点击读页面内 Cordis 服务，不读本模块的内部状态。
-      ctx.effect(() => mountBaifan(ctx), 'dsh-pet: activity-baifan');
+      // 内置玩法「吃白饭」：覆盖层注册进 shell.overlay（与桌宠同槽），不自己挂 body——
+      // body 直接子级会命中宿主的 macOS no-drag 规则，还会越级盖住宿主模态框。
+      const BaifanLayer = makeBaifanLayer({ h, useRef, useEffect }, (host) => mountBaifan(ctx, host));
+      ctx.slots.inject('shell.overlay', function* () {
+        yield ctx.slots.register({ name: 'shell.overlay', id: 'baifan', order: 1100 }, BaifanLayer);
+      });
 
       // 系统通知：host 把通知帧写进 /state 的 sections.notify，统一轮询发现变化后弹 toast。
       ctx.effect(

@@ -42,7 +42,7 @@ test('卸载后迟到配置不再注册菜单', async (t) => {
       return { json: () => config };
     },
   });
-  const dispose = mountBaifan({ get: () => undefined });
+  const dispose = mountBaifan({ get: () => undefined }, document.body);
   await new Promise<void>((resolve) => setImmediate(resolve));
   dispose();
   resolveConfig({ main: { animations: { baifan: ['a', 'b', 'c', 'd', 'e'] } } });
