@@ -13,10 +13,10 @@
     "pnpm": "11.28.5"
   },
   "candidate": {
-    "pluginVersion": "0.4.5-fork.5",
-    "status": "Focused source lifecycle tests and Host/Web/helper JavaScript build; fixed Git combination and UI pending",
+    "pluginVersion": "0.4.5-fork.6",
+    "status": "Targeted helper voice mapping and display relayout regression; source checks and fixed Git runtime acceptance recorded separately",
     "upstreamCommit": "be4536da0ca71947058777d904874977ab9ab841",
-    "integration": "Selected Web voice/overlay commits; keep fork memory and assistant changes; exclude release-only and unrelated Desktop/macOS changes",
+    "integration": "Selected Web voice/overlay and used Helper speech/relayout fixes; retain fork memory, assistant and sandbox changes",
     "coreCandidate": {
       "version": "0.2.2-rc.1",
       "commit": "955ba060b3bfa9908cb3ea4da63ff580f51beb72"
