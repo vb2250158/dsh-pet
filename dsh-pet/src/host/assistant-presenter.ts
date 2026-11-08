@@ -2,6 +2,9 @@
 import type { PollStateStore } from './state.ts';
 import type { HttpRouteHandler } from './plugin/http-route.ts';
 
+/** 当前运行模块的插件版本；不从可变安装目录读取。 */
+const PACKAGE_VERSION = '0.4.5-fork.7';
+
 /** Display-only payload; never accepts tools, model requests, URLs or speech credentials. */
 export interface AssistantPresentation {
   petId: string;
@@ -19,10 +22,15 @@ export function createAssistantPresenter(deps: {
   let active: object | undefined;
   let releaseCurrent: (() => Promise<void>) | undefined;
   let closed = false;
-  const entry = () => ({ available: !closed && !!active, protocol: 1, path: '/?voice-assistant=1' });
+  const entry = () => ({
+    available: !closed && !!active,
+    protocol: 1,
+    path: '/?voice-assistant=1',
+    packageVersion: PACKAGE_VERSION,
+  });
   return {
     protocol: 1,
-    packageVersion: '0.4.5-fork.6',
+    packageVersion: PACKAGE_VERSION,
     entry,
     listPets: () => deps.listPets().map((pet) => ({ id: String(pet.id), name: String(pet.name || pet.id) })),
     attach() {

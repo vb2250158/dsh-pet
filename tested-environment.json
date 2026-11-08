@@ -13,7 +13,7 @@
     "pnpm": "11.28.5"
   },
   "candidate": {
-    "pluginVersion": "0.4.5-fork.6",
+    "pluginVersion": "0.4.5-fork.7",
     "status": "Targeted helper voice mapping and display relayout regression; source checks and fixed Git runtime acceptance recorded separately",
     "upstreamCommit": "be4536da0ca71947058777d904874977ab9ab841",
     "integration": "Selected Web voice/overlay and used Helper speech/relayout fixes; retain fork memory, assistant and sandbox changes",

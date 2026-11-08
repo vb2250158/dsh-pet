@@ -105,7 +105,7 @@ paths:
       summary: 查询同宿主助手 GUI 导航能力
       description: 需要 DSH Host 认证及 Host/Origin 检查；桌面私有桥复用同一处理器。不触发模型或麦克风。
       responses:
-        '200':
+        "200":
           description: 当前导航能力
           content:
             application/json:
@@ -115,9 +115,12 @@ paths:
                 properties:
                   available: { type: boolean }
                   protocol: { const: 1 }
-                  path: { const: '/?voice-assistant=1' }
-        '401': { description: 尚未通过宿主认证 }
-        '403': { description: Host 或 Origin 被拒绝 }
+                  path: { const: "/?voice-assistant=1" }
+                  packageVersion:
+                    type: string
+                    description: 当前已加载的插件模块版本；助手不可用时仍返回。
+        "401": { description: 尚未通过宿主认证 }
+        "403": { description: Host 或 Origin 被拒绝 }
   /dsh-pet-7340/state:
     get:
       tags: [State]
@@ -1428,7 +1431,7 @@ paths:
         - name: id
           in: path
           required: true
-          description: '`POST /anim` 响应里的 `playbackId`。'
+          description: "`POST /anim` 响应里的 `playbackId`。"
           schema:
             type: string
           example: pb-mfh2k1-1
@@ -1495,7 +1498,7 @@ paths:
         - name: id
           in: path
           required: true
-          description: '`playbackId`。'
+          description: "`playbackId`。"
           schema:
             type: string
           example: pb-mfh2k1-1
@@ -1510,7 +1513,7 @@ paths:
                 status:
                   type: string
                   enum: [playing, ended, failed, cancelled]
-                  description: '只接受这四个——`accepted` 是宿主受理态，上报它回 400。'
+                  description: "只接受这四个——`accepted` 是宿主受理态，上报它回 400。"
                 reason:
                   type: string
                   description: |
@@ -3102,7 +3105,7 @@ paths:
                   example: 1793000000000
       responses:
         "200":
-          description: '新建结果；正文为空 / 超长或 `dueAt` 非法时回 `ok: false` + `bad-request`'
+          description: "新建结果；正文为空 / 超长或 `dueAt` 非法时回 `ok: false` + `bad-request`"
           content:
             application/json:
               schema:
@@ -3170,7 +3173,7 @@ paths:
       tags: [Action]
       operationId: deleteTodo
       summary: 删除一条待办
-      description: '幂等：id 不存在也回 `ok: true`，`removed: 0`。'
+      description: "幂等：id 不存在也回 `ok: true`，`removed: 0`。"
       parameters:
         - $ref: "#/components/parameters/TodoIdPath"
       responses:
@@ -4586,7 +4589,7 @@ components:
           $ref: "#/components/schemas/Todo"
         reason:
           type: string
-          description: '失败原因（如 `bad-request` / `todo-not-found`）'
+          description: "失败原因（如 `bad-request` / `todo-not-found`）"
         message:
           type: string
 

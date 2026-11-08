@@ -39,6 +39,11 @@ function fixture(t: TestContext) {
   const service = createAssistantPresenter({ state, route, listPets: () => [{ id: 'fish', name: 'Fish' }] });
   return {
     service,
+    entryRoute: () =>
+      createHttpRoute({ ...routeDeps, assistantEntry: () => service.entry() }).handlePetRoute(
+        '/dsh-pet-7340/assistant-entry',
+        'GET',
+      ),
     state,
     calls,
     lock: () => {
@@ -102,4 +107,20 @@ test('detached in-flight presentation cannot reach the real route write', async 
   await lease.dispose();
   await assert.rejects(pending, /REJECTED/);
   assert.equal(f.state.read().pets.fish, undefined);
+});
+
+test('assistant entry reports the loaded module version without an attached assistant', async (t) => {
+  const f = fixture(t);
+  const result = await f.entryRoute();
+  assert.equal(result.kind, 'json');
+  if (result.kind !== 'json') throw new Error('Expected JSON entry response');
+  assert.deepEqual(result.obj, {
+    available: false,
+    protocol: 1,
+    path: '/?voice-assistant=1',
+    packageVersion: '0.4.5-fork.7',
+  });
+  assert.equal(f.service.packageVersion, '0.4.5-fork.7');
+  assert.deepEqual(f.calls, []);
+  await f.service.dispose();
 });
