@@ -400,3 +400,7 @@ AI 提示词 → 绿幕视频 → 透明动画 → 插件，换角色、换动�
 ## 界面语言
 
 插件列表中的名称和描述随 DSH 的中文、英文语言设置切换。
+
+## Maintenance fork.8
+
+Synced the seven upstream commits after c253868 through 6e4735a. The shared menu closes a sibling submenu when a leaf is hovered, the shared alpha correction defaults off, and Host log timestamps include the local offset. Helper positioning and pointer-leave fixes are retained in the shipped JavaScript. Existing fork personality, memory, screenshot and activity lifecycle behavior is preserved.
