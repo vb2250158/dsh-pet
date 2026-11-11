@@ -1,3 +1,10 @@
+# 0.4.5-fork.12
+
+- 按逻辑接收上游城市与天气、时间行环境事实及省份/一小时天气缓存三项更新。对话、碎碎念和梦话会查询出口 IP 的粗略城市，再查询 Open-Meteo 地名及天气，并把可用事实加入模型 system 时间行。
+- IP 查询首选 ip-api.com 明文 HTTP，失败后使用 ipwho.is HTTPS；天气与地名通过 HTTPS 查询 Open-Meteo。IP 缓存六小时、坐标缓存七天、天气缓存一小时；查询失败省略不可用事实。IP 定位是网络粗估，天气按同名城市首条地名结果取得。
+- 保留助手、人格与记忆、素材 URL 动画及跨挂载 CAS 租约修复。拒绝空白数值被转换为零并写入天气上下文；合成网络与时钟验证不代表真实定位结果或性能提升。
+- Integrate three upstream environment-context changes while preserving maintained assistant, memory, URL animation and cross-mount lease behavior. Reject blank weather numbers instead of reporting zero. This source candidate requires separate installation and runtime acceptance.
+
 # 0.4.5-fork.11
 
 - 修复吃白饭活动跨页面挂载的锁竞争：卸载同步撤销本实例的锁接管标记，迟到的取锁、续锁与放锁回执不会覆盖或释放新实例的租约。

@@ -1,6 +1,6 @@
 /**
  * 城市天气查询的契约测试：地名解析 → 当前天气两跳、字段非法不编数值、查不到返回 null；
- * 天气缓存 10 分钟、坐标缓存 7 天，两级各自生效。
+ * 天气缓存 1 小时、坐标缓存 7 天，两级各自生效。
  *
  * fetch 用手写替身，不联网；时钟由 now 注入，缓存过期可精确控制。
  */
@@ -126,6 +126,17 @@ describe('queryWeather —— 查询路径', () => {
 
     assert.equal(snapshot, null);
   });
+
+  for (const value of ['', '   ']) {
+    test('空白天气数值不能被当作零：' + JSON.stringify(value), async () => {
+      resetWeatherCache();
+      const fake = fakeFetch([
+        () => json(SHENZHEN),
+        () => json({ current: { ...CURRENT.current, temperature_2m: value } }),
+      ]);
+      assert.equal(await queryWeather('深圳', { fetchImpl: fake.impl, sleep: NO_SLEEP }), null);
+    });
+  }
 });
 
 describe('queryWeather —— 缓存', () => {
