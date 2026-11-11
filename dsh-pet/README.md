@@ -1,5 +1,9 @@
 # dsh-pet 🐾
 
+0.4.5-fork.11 修复活动重挂时迟到的锁回执；新实例的租约不会被旧实例覆盖或释放。远端放锁在同步卸载后异步完成。
+
+`0.4.5-fork.11` protects replacement mounts from late lock operations; remote release continues asynchronously after synchronous cleanup.
+
 `0.4.3-fork.4` 修复吃白饭活动停止、卸载和连续重开时的迟到取锁回执；正式安装与页面验收由宿主维护流程完成。
 
 `0.4.3-fork.4` fixes late lock receipts during activity stop, disposal and replacement. Installation and page acceptance follow the Host maintenance workflow.

@@ -1,3 +1,7 @@
+`0.4.5-fork.11` 修复吃白饭活动跨页面重挂时的迟到锁回执：卸载同步撤销本实例的锁接管标记，避免旧实例覆盖或释放新实例租约。源码与正式安装状态分别记录。
+
+`0.4.5-fork.11` protects replacement mounts from late activity lock operations. Source and installed versions are recorded separately.
+
 `0.4.5-fork.7` 在已认证的助手入口响应中提供实际加载模块版本。修复 Helper 语音事件到气泡收尾的映射，并在显示器变化后保留角落和边距设置。同步自动语音单槽、通知播报和吃白饭官方浮层入口。语音随插件卸载停止并释放监听，迟到的合成不再恢复播放；保留原有对话记忆、请求记录及助手显示租约。源码检查和固定 Git 组合界面验收分别记录。 原 `voiceEnabled` 现在只控制聊天与手动碎碎念；周期碎碎念、待办与通知分别使用 `voiceWhisperEnabled`、`voiceTodoEnabled`、`voiceNotifyEnabled`，已有配置值保留。`/broadcast` 默认仅显示气泡，需要播报时显式传 `speak: true` 并指定 `surface`。
 
 `0.4.5-fork.4` 为官方 peers 显式加入 `0.2.2-rc.1`，与语音助手 `0.1.5` 的当前 Core 约束对齐；保留原有受测版本范围。固定 Git 官方安装及桌宠组合运行仍单独验收。

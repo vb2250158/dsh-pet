@@ -1,3 +1,9 @@
+# 0.4.5-fork.11
+
+- 修复吃白饭活动跨页面挂载的锁竞争：卸载同步撤销本实例的锁接管标记，迟到的取锁、续锁与放锁回执不会覆盖或释放新实例的租约。
+- 保留现有素材 URL 动画、宠物助手与记忆行为；模拟共享 sessionStorage 和独立实例验证迟到回执。源码版本与正式安装状态分别记录。
+- Prevent late activity lock operations from overwriting or releasing a replacement mount’s lease.
+
 # 0.4.5-fork.7
 
 - 已认证的 `GET /assistant-entry` 返回当前运行模块的 `packageVersion`，即使未安装助手也可验收。入口响应和进程内显示服务共用版本常量，不读取磁盘文件冒充运行状态。
