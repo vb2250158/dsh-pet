@@ -404,3 +404,7 @@ AI 提示词 → 绿幕视频 → 透明动画 → 插件，换角色、换动�
 ## Maintenance fork.8
 
 Synced the seven upstream commits after c253868 through 6e4735a. The shared menu closes a sibling submenu when a leaf is hovered, the shared alpha correction defaults off, and Host log timestamps include the local offset. Helper positioning and pointer-leave fixes are retained in the shipped JavaScript. Existing fork personality, memory, screenshot and activity lifecycle behavior is preserved.
+
+### Maintenance fork.9
+
+Synced upstream f7e5315. The shipped Windows pet helper asynchronously verifies its cached primary-display scale and rebuilds its windows when the scale changes. Existing Host/Client behavior and fork activity lifecycle remain as validated in fork.8. The four helper files are shipped JavaScript and require no desktop package build.
