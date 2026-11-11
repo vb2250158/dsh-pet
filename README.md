@@ -408,3 +408,7 @@ Synced the seven upstream commits after c253868 through 6e4735a. The shared menu
 ### Maintenance fork.9
 
 Synced upstream f7e5315. The shipped Windows pet helper asynchronously verifies its cached primary-display scale and rebuilds its windows when the scale changes. Existing Host/Client behavior and fork activity lifecycle remain as validated in fork.8. The four helper files are shipped JavaScript and require no desktop package build.
+
+### Maintenance fork.10
+
+Synced upstream d31d960. Static `/pic` requests now prefer user-owned picture files before packaged assets, using the same relative-path guard. Plugin upgrades preserve those user overrides.
