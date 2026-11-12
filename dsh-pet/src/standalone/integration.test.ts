@@ -155,6 +155,7 @@ describe('插件宿主半边在独立模式下跑起来了', () => {
     assert.deepEqual(Object.keys(body.sections).sort(), [
       'balance',
       'config',
+      'env',
       'focusSession',
       'menu',
       'notify',
