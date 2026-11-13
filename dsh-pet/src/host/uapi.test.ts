@@ -107,6 +107,24 @@ describe('fetchUapiWeather —— 字段换算', () => {
     const hit = await fetchUapiWeather({ fetchImpl: fake.impl, sleep: NO_SLEEP, now: () => NOW_MS });
     assert.equal(hit?.weather.apparentC, 17);
   });
+
+  test('必填数值为空白字符串时拒绝结果，不记成零', async () => {
+    for (const field of ['temperature', 'humidity']) {
+      for (const value of ['', ' \t ']) {
+        resetUapiCache();
+        const fake = fakeFetch([() => json({ ...UAPI_OK, [field]: value })]);
+        const hit = await fetchUapiWeather({ fetchImpl: fake.impl, sleep: NO_SLEEP, now: () => NOW_MS });
+        assert.equal(hit, null, `${field} 的空白值不能成为天气事实`);
+      }
+    }
+  });
+
+  test('体感为空白字符串时使用气温，不记成零', async () => {
+    resetUapiCache();
+    const fake = fakeFetch([() => json({ ...UAPI_OK, feels_like: ' \t ' })]);
+    const hit = await fetchUapiWeather({ fetchImpl: fake.impl, sleep: NO_SLEEP, now: () => NOW_MS });
+    assert.equal(hit?.weather.apparentC, 17);
+  });
 });
 
 describe('fetchUapiWeather —— 失败与缓存', () => {

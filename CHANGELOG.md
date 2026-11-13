@@ -1,3 +1,11 @@
+# 0.4.8-fork.1
+
+- 按逻辑接收上游七项环境接口、天气气泡、指定宠物余额、UAPI 查询、后台梦话和前台提醒更新，保留助手显示、请求记录预算、素材 URL、跨挂载锁和认证处理。
+- 城市与天气优先通过 HTTPS UAPI 按出口 IP 查询，成功结果缓存十分钟并共用进行中的请求；失败继续使用原 IP 定位与 Open-Meteo。手动查询可强制刷新。没有发送真实位置或模型请求来验证该候选。
+- 梦话遵循宠物的碎碎念与显示开关；周期限制在 Node 定时器上限内。新增前台提醒开关默认关闭，原有通知与语音总开关继续生效。
+- 拒绝 UAPI 空白温度和湿度，空白体感按已知气温处理；保留此前 Open-Meteo 空白数值修复。源码检查和固定宿主测试分别记录，天气气泡、菜单与设置的实际 GUI 验收仍暂停。
+- Integrate the seven reviewed upstream commits through e755e7b while preserving maintained ownership and persistence behavior. Validate against the current Core549 source Web environment. The new UI remains a source candidate pending actual GUI acceptance.
+
 # 0.4.5-fork.12
 
 - 按逻辑接收上游城市与天气、时间行环境事实及省份/一小时天气缓存三项更新。对话、碎碎念和梦话会查询出口 IP 的粗略城市，再查询 Open-Meteo 地名及天气，并把可用事实加入模型 system 时间行。
