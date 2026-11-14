@@ -173,6 +173,7 @@ PetSprite.prototype.applyWhisperHold = function applyWhisperHold(event) {
 // 收起说话气泡（POST /bubble/clear 的落点）。只动气泡：正在播的动画、余额气泡、
 // 工作状态气泡都不碰——气泡与动作是两把锁、分别释放。与浏览器端 clearWhisperBubble 同一语义。
 PetSprite.prototype.clearWhisper = function clearWhisper() {
+  this.clearWhisperPop();
   this.whisperText = '';
   this.whisperView = null;
   this.whisperImage = '';
@@ -180,12 +181,20 @@ PetSprite.prototype.clearWhisper = function clearWhisper() {
   this.applyWhisperHold({ kind: 'clear' });
 };
 
-// 戳破说话气泡（用户点击的落点）：先播消失动画，播完再走 clearWhisper。
-// 与 clearWhisper 同一语义——只收气泡，不碰动画与另两种气泡。
+// 新台词、明确清理和卸载都取消本实例尚未完成的收起动画。
+PetSprite.prototype.clearWhisperPop = function clearWhisperPop() {
+  if (this.whisperPopTimer !== null) window.clearTimeout(this.whisperPopTimer);
+  this.whisperPopTimer = null;
+  this.bubble.classList.remove('is-popping');
+};
+
+// 戳破只收当前说话气泡，不碰工作、余额或本体动画。
 PetSprite.prototype.popWhisper = function popWhisper() {
   if (!this.whisperClickable()) return;
+  this.clearWhisperPop();
   this.bubble.classList.add('is-popping');
-  window.setTimeout(() => {
+  this.whisperPopTimer = window.setTimeout(() => {
+    this.whisperPopTimer = null;
     this.bubble.classList.remove('is-popping');
     this.clearWhisper();
   }, WHISPER_POP_MS);
@@ -226,7 +235,7 @@ PetSprite.prototype.showWhisper = function showWhisper(text, image, url, duratio
   }
   if (duration === 0) return;
   // 新台词要看得见：清掉上一条戳破残留的消失动画。
-  this.bubble.classList.remove('is-popping');
+  this.clearWhisperPop();
   this.whisperView = S.whisperBubbleView({ ok: true, text, ts: 0 });
   this.whisperText = text;
   this.whisperImage = typeof image === 'string' ? image : '';

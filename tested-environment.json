@@ -13,10 +13,10 @@
     "pnpm": "11.28.5"
   },
   "candidate": {
-    "pluginVersion": "0.4.8-fork.1",
-    "status": "Source Web candidate; actual weather bubble, menu and settings GUI acceptance is paused",
-    "upstreamCommit": "e755e7be5b67ff1ebde5f4eed39ab9e58a2f16bf",
-    "integration": "Seven reviewed environment, targeted balance, UAPI, sleep-talk and focused notification commits, preserving fork ownership and persistence",
+    "pluginVersion": "0.4.8-fork.2",
+    "status": "Source Web candidate; actual browser and native Helper GUI acceptance remains paused",
+    "upstreamCommit": "1388ffc66bff2c99fd547efc0667b0c840890069",
+    "integration": "Five incremental upstream changes: signed TTS rate bounds, authenticated Helper entry resolution, JSON failure classification, blocked-turn cleanup and bubble dismissal; preserved maintained request, lease and defaults.",
     "coreCandidate": {
       "version": "0.2.2-rc.1",
       "commit": "54931fbd25050ef036e44b1daec931da2bfe7b39"
@@ -28,12 +28,12 @@
     "status": "Historical fork.2 dependency/prepack evidence; superseded source candidate above"
   },
   "formal": {
-    "pluginVersion": "0.4.5-fork.11",
+    "pluginVersion": "0.4.5-fork.12",
     "core": {
       "version": "0.2.2-rc.1",
       "commit": "54931fbd25050ef036e44b1daec931da2bfe7b39"
     },
-    "status": "Currently accepted formal plugin before this candidate"
+    "status": "Accepted formal version; source candidate is not installed"
   },
   "compatibilityMatrix": false,
   "requestPersistenceValidation": {
@@ -86,19 +86,34 @@
     },
     "node": "24.15.0",
     "pnpm": "11.28.5",
-    "scope": "Current Windows source Web Host, Client and shared helper assets",
-    "hostAndClientTypecheck": true,
-    "pluginBuild": true,
+    "scope": "Changed current Source Web Host, Client and shared Helper code; real React/JSDOM plus actual Helper script lifecycle in isolated VM",
+    "prior382TestsReused": true,
+    "actualGui": false,
+    "formalInstall": false,
+    "externalRequests": 0,
+    "modelRequests": 0,
     "focusedTests": {
-      "passed": 382,
+      "passed": 122,
       "failed": 0,
       "skipped": 0
     },
-    "externalWeatherOrIpRequests": 0,
-    "modelRequests": 0,
-    "actualGui": false,
-    "formalInstall": false,
-    "fullSuite": false,
-    "otherProductFixtureIncluded": false
+    "newOwnerTests": {
+      "passed": 5,
+      "failed": 0
+    },
+    "realReactAndHelperLifecycle": {
+      "passed": 7,
+      "failed": 0,
+      "upstreamNegative": {
+        "failed": 4,
+        "passed": 3
+      }
+    },
+    "hostAndClientTypecheck": true,
+    "newOwnerTestTypecheck": true,
+    "pluginBuild": true,
+    "changedEslint": true,
+    "changedHelperNoUndef": true,
+    "fullCombinationAccepted": false
   }
 }

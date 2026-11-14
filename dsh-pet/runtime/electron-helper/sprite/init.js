@@ -85,6 +85,7 @@ Object.assign(PetSprite.prototype, {
     // 说话（碎碎念/命令气泡/对话回复）：文本与配图由容器统一轮询 /state 后经 showWhisper 送进来。
     this.whisperOn = false;
     this.whisperTimer = null;
+    this.whisperPopTimer = null;
     this.whisperView = null;
     this.whisperText = '';
     // 收起计划：合成期间挂起计时，播完再留尾巴（状态机在 shared/bubble-hold，与浏览器端同一份）

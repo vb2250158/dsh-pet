@@ -216,6 +216,9 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
     const [whisperText, setWhisperText] = useState<string | null>(null);
     const [whisperImage, setWhisperImage] = useState<string | undefined>(undefined);
     const [whisperUrl, setWhisperUrl] = useState<string | undefined>(undefined);
+    // 相同文本的新台词也拥有独立的显示与收起回调。
+    const [whisperEvent, setWhisperEvent] = useState(0);
+    const whisperEventRef = useRef(0);
     const whisperHoldRef = useRef<BubbleHoldState>(BUBBLE_HOLD_IDLE);
     const whisperTextRef = useRef<string | null>(null);
     const whisperTimerRef = useRef<number | null>(null);
@@ -300,6 +303,8 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
 
     const showWhisper = (text: string, parts: { image?: string; url?: string }, duration?: number) => {
       if (duration === 0) return; // 只联动动画、不改气泡时走这里。
+      whisperEventRef.current += 1;
+      setWhisperEvent(whisperEventRef.current);
       setWhisperText(text);
       whisperTextRef.current = text;
       setWhisperImage(parts.image);
@@ -365,6 +370,7 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
         return whisperText === null
           ? null
           : h(WhisperBubble, {
+              key: whisperEvent,
               text: whisperText,
               image: whisperImage,
               url: whisperUrl,
@@ -372,7 +378,9 @@ export function createBubbleSlots(rt: BubbleSlotsRuntime, components: BubbleComp
               on: whisperOn,
               voiceState,
               // 戳破：动画播完由组件回调收起，只动气泡，不碰动画与另三种气泡。
-              onPop: clearWhisper,
+              onPop: () => {
+                if (whisperEventRef.current === whisperEvent) clearWhisper();
+              },
             });
       }
       // 终态与非终态共用同一个组件，差别只在停留时长与优先级。

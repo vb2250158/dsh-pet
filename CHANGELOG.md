@@ -1,3 +1,10 @@
+# 0.4.8-fork.2
+
+- 接收上游五项新增逻辑，保留语速正负号检查、宿主公开入口事件、响应体超时/网络/JSON 错误分类，以及被拒绝回合的工作状态清理。
+- 浏览器和 Helper 说话气泡支持点击收起。每次新台词具有独立显示身份，同文新事件也撤销旧收起动作；Helper 在新台词、明确清理和卸载时取消自己的动画计时器。工作气泡仍跳会话，余额气泡仍翻页。
+- 当前受测环境为 Core549 / 0.2.2-rc.1、Windows x64、Node24.15.0、pnpm11.28.5。正式版本仍为0.4.5-fork.12；新浏览器交互、动画与原生 Helper 外观等待恢复 GUI 验收。
+- Integrate five incremental upstream changes through1388ffc. Preserve per-utterance dismissal ownership in Web and Helper runtimes. This source candidate remains pending actual GUI and combination acceptance.
+
 # 0.4.8-fork.1
 
 - 按逻辑接收上游七项环境接口、天气气泡、指定宠物余额、UAPI 查询、后台梦话和前台提醒更新，保留助手显示、请求记录预算、素材 URL、跨挂载锁和认证处理。

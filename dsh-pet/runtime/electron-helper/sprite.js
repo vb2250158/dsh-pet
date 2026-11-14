@@ -107,6 +107,7 @@ class PetSprite {
     this.inputRegionElements.clear();
     if (this.bubbleTimer !== null) window.clearTimeout(this.bubbleTimer);
     if (this.whisperTimer !== null) window.clearTimeout(this.whisperTimer);
+    this.clearWhisperPop();
     if (this.workTimer !== null) window.clearTimeout(this.workTimer);
     if (this.chatMount) {
       this.chatMount.close();
