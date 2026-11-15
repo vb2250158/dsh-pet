@@ -1,3 +1,7 @@
+`0.4.9-fork.1` 同步多服务商语音合成与识别、DeepSeek语音适配、天气城市覆盖及独立模式服务商配置。已有Edge音色读取为带provider前缀的同一选择；内置语音注册由插件effect持有并释放，重复旧注销保留新注册。保留助手/Rabi、请求记录、显示租约和同文气泡撤销修复。受测宿主为Core549/rc.1，正式仍为0.4.5-fork.12；新设置与原生Helper界面等待GUI验收。
+
+`0.4.9-fork.1` integrates eleven plugin/shared-standalone updates through572cf0f. Saved Edge voices retain their selected identity through qualified IDs. Built-in voice registrations follow plugin effect disposal, and repeated old cleanup preserves replacements. The candidate targets Core549/rc.1 and awaits its fixed-Git combination and applicable GUI acceptance.
+
 `0.4.5-fork.11` 修复吃白饭活动跨页面重挂时的迟到锁回执：卸载同步撤销本实例的锁接管标记，避免旧实例覆盖或释放新实例租约。源码与正式安装状态分别记录。
 
 `0.4.5-fork.11` protects replacement mounts from late activity lock operations. Source and installed versions are recorded separately.

@@ -8,6 +8,15 @@
 import { CORNER_SET, GLOBAL_DEFAULT_KEYS, isValidPetId, PET_DISPLAY_SET, warnOnce } from './constants.ts';
 import { isValidSizePercent, SIZE_PERCENT_DEFAULT, SIZE_PERCENT_MIN } from '../../shared/pet-size.ts';
 import { topFieldValid } from './validate.ts';
+import { VOICES } from '../voice/voices.ts';
+
+/** 将已保存的旧 Edge 音色补上 provider 前缀，保留用户原先选择。 */
+function storedFieldValue(key: string, value: unknown): unknown {
+  if (key === 'voiceName' && typeof value === 'string' && VOICES.some((voice) => voice.id === value)) {
+    return 'edge/' + value;
+  }
+  return value;
+}
 
 /**
  * 文件宠物条目的合并基座：内置默认 + 白名单字段改用用户层的值。这些字段是用户级成本/偏好/
@@ -21,7 +30,7 @@ export function packBase(
   if (!mainOverlay) return base;
   let out: Record<string, unknown> | undefined;
   for (const key of GLOBAL_DEFAULT_KEYS) {
-    const own = mainOverlay[key];
+    const own = storedFieldValue(key, mainOverlay[key]);
     if (own === undefined || !topFieldValid(key, own)) continue;
     out ??= { ...base };
     out[key] = own;
@@ -43,7 +52,7 @@ export function mergeEntry(
       out.pets = mergePets(basePets, overlay?.[key], label, seenIds);
       continue;
     }
-    const own = overlay ? overlay[key] : undefined;
+    const own = storedFieldValue(key, overlay?.[key]);
     // 结构性常态：覆盖层（尤其是设置页写的用户层）本来就不写顶层字段 → 缺失静默取默认，不告警；
     // 只有「显式写了但非法」才告警（真异常，默认值兜底）
     if (own === undefined) {

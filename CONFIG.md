@@ -133,3 +133,9 @@ $DSH_HOME/dsh-pet/
 - 配置非法 / 缺少 `-animation/` 目录 / 实例 id 与主宠物冲突 → 加载时显式报错并跳过（不影响其他宠物）
 - 设置页**会列出**文件宠物（按种类分组）：改名称/大小/位置/显示方式/四个开关/实例人设后保存，写回该种类自己的配置文件——不混进 `main-config.jsonc`，文件顶层的动画池与人设原样保留；「+」可在该种类下新建实例，每种至少留一只
 - 余额档位动画按各宠物自己的 `events.balance`
+
+## 0.4.9维护版的既有语音配置
+
+读取已有四个Edge音色时，`zh-CN-*Neural` 转为同一个音色的 `edge/zh-CN-*Neural`。主配置的选择继续作为文件宠物的默认，文件宠物自己的选择优先；新服务商使用目录中的限定ID。磁盘写入由正常保存入口负责。
+
+Existing four-voice Edge selections are read as the corresponding qualified `edge/<voice>` IDs. Main selections supply file-pet defaults, and each explicit pet selection takes precedence. Custom qualified IDs retain their provider. Normal save owns persistence.

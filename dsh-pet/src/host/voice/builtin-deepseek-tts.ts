@@ -54,8 +54,9 @@ export function createDeepseekTtsProvider(deps: { resolveKey: ResolveKey }): Voi
  * 确保 DeepSeek TTS 实现在注册表里；重复调用无副作用（多次装配、热重载都会经过这里）。
  *
  * @param deps.resolveKey - 惰性取 API key。
+ * @returns 新注册的注销函数；已存在时不给予移除权限。
  */
-export function ensureDeepseekTtsProvider(deps: { resolveKey: ResolveKey }): void {
+export function ensureDeepseekTtsProvider(deps: { resolveKey: ResolveKey }): (() => void) | undefined {
   if (resolveVoice(limitedVoiceId(DEEPSEEK_TTS_PROVIDER_ID, VOICES[0].id))) return;
-  registerVoiceProvider(createDeepseekTtsProvider(deps));
+  return registerVoiceProvider(createDeepseekTtsProvider(deps));
 }

@@ -1,3 +1,10 @@
+# 0.4.9-fork.1
+
+- 纳入多槽TTS/ASR目录、内置Edge/DSH/DeepSeek实现、天气城市选择和独立模式服务商分栏。上游独立metrics站点部署由其原拥有者维护。
+- 配置读取将四个旧Edge音色ID补全为`edge/<voice>`，保留主配置、种类覆盖和自定义限定ID。保存由正常配置入口负责。
+- 内置provider随Cordis effect释放，旧注销重复调用保持新注册；保留caller取消、迟到失败观察和监听清理。
+- Integrate the reviewed plugin/shared runtime changes while retaining maintained lifecycle, configuration and speech-bubble fixes. Actual GUI acceptance remains pending.
+
 # 0.4.8-fork.2
 
 - 接收上游五项新增逻辑，保留语速正负号检查、宿主公开入口事件、响应体超时/网络/JSON 错误分类，以及被拒绝回合的工作状态清理。

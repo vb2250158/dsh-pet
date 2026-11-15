@@ -1641,3 +1641,32 @@ describe('removeRoundsByTs —— 按轮删除（一轮两条共享 ts，成对�
     assert.equal(r.removed, 4);
   });
 });
+
+describe('legacy Edge voice identifiers', () => {
+  test('preserves main and file-pet voice choices without rewriting stored data', (t) => {
+    const paths = withBase({ voiceName: 'edge/zh-CN-XiaoyiNeural' }, { voiceName: 'zh-CN-YunjianNeural' });
+    t.after(() => rmSync(dirname(paths.userFile), { recursive: true, force: true }));
+    mkdirSync(paths.petDir);
+    writeFileSync(
+      join(paths.petDir, 'synthetic-config.json'),
+      JSON.stringify({ voiceName: 'zh-CN-YunxiNeural', pets: [{ ...BASE.pets[0], id: 'synthetic' }] }),
+    );
+    const before = readFileSync(paths.userFile, 'utf8');
+    const current = readAllConfig(paths);
+    assert.equal(current.main.voiceName, 'edge/zh-CN-YunjianNeural');
+    assert.equal(current.synthetic.voiceName, 'edge/zh-CN-YunxiNeural');
+    assert.equal(readFileSync(paths.userFile, 'utf8'), before);
+  });
+  test('inherits the selected legacy main voice and retains qualified custom providers', (t) => {
+    const paths = withBase({ voiceName: 'edge/zh-CN-XiaoyiNeural' }, { voiceName: 'zh-CN-YunjianNeural' });
+    t.after(() => rmSync(dirname(paths.userFile), { recursive: true, force: true }));
+    mkdirSync(paths.petDir);
+    writeFileSync(
+      join(paths.petDir, 'synthetic-config.json'),
+      JSON.stringify({ pets: [{ ...BASE.pets[0], id: 'synthetic' }] }),
+    );
+    assert.equal(readAllConfig(paths).synthetic.voiceName, 'edge/zh-CN-YunjianNeural');
+    writeFileSync(paths.userFile, JSON.stringify({ voiceName: 'custom/personal-voice' }));
+    assert.equal(readAllConfig(paths).main.voiceName, 'custom/personal-voice');
+  });
+});

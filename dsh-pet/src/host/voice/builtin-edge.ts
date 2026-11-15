@@ -36,8 +36,9 @@ export const EDGE_PROVIDER: VoiceProvider = {
  * 确保内置实现在注册表里；重复调用无副作用（多次装配、热重载都会经过这里）。
  *
  * 已经注册过时直接返回，不去覆盖同 id 的另一份——那会让配置里已选的音色在背后换实现。
+ * @returns 新注册的注销函数；已存在时不给予移除权限。
  */
-export function ensureEdgeProvider(): void {
+export function ensureEdgeProvider(): (() => void) | undefined {
   if (resolveVoice(limitedVoiceId(EDGE_PROVIDER_ID, DEFAULT_VOICE))) return;
-  registerVoiceProvider(EDGE_PROVIDER);
+  return registerVoiceProvider(EDGE_PROVIDER);
 }

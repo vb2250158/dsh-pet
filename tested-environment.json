@@ -13,10 +13,10 @@
     "pnpm": "11.28.5"
   },
   "candidate": {
-    "pluginVersion": "0.4.8-fork.2",
+    "pluginVersion": "0.4.9-fork.1",
     "status": "Source Web candidate; actual browser and native Helper GUI acceptance remains paused",
-    "upstreamCommit": "1388ffc66bff2c99fd547efc0667b0c840890069",
-    "integration": "Five incremental upstream changes: signed TTS rate bounds, authenticated Helper entry resolution, JSON failure classification, blocked-turn cleanup and bubble dismissal; preserved maintained request, lease and defaults.",
+    "upstreamCommit": "572cf0ff68e7ffbe76afe4ba5fd8ae99ec7e0733",
+    "integration": "Eleven plugin/shared-standalone changes from the twelve-commit upstream increment. Upstream metrics-site deployment retains its separate owner. Preserved maintained Helper/Rabi/display leases, request persistence and utterance dismissal; migrated saved Edge voice selections and owned built-in speech provider disposal.",
     "coreCandidate": {
       "version": "0.2.2-rc.1",
       "commit": "54931fbd25050ef036e44b1daec931da2bfe7b39"
@@ -93,7 +93,7 @@
     "externalRequests": 0,
     "modelRequests": 0,
     "focusedTests": {
-      "passed": 122,
+      "passed": 453,
       "failed": 0,
       "skipped": 0
     },
@@ -114,6 +114,14 @@
     "pluginBuild": true,
     "changedEslint": true,
     "changedHelperNoUndef": true,
-    "fullCombinationAccepted": false
+    "fullCombinationAccepted": false,
+    "sourceVersion": "0.4.9-fork.1",
+    "priorBubbleLifecycleReused": true,
+    "newOwnerRegressionTests": {
+      "passed": 8,
+      "failed": 0
+    },
+    "beforeFixRegressionFailures": 8,
+    "normalGitDelivery": "New fixed source pending final published Git install; prior03bff normal Git delivery separately verified"
   }
 }

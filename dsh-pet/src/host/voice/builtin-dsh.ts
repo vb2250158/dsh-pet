@@ -69,8 +69,9 @@ export function createDshSpeechProvider(deps: { speechToText: () => unknown }): 
  * 已经注册过时直接返回，不去覆盖同 id 的另一份。
  *
  * @param deps.speechToText - 惰性取 DSH 的识别服务。
+ * @returns 新注册的注销函数；已存在时不给予移除权限。
  */
-export function ensureDshSpeechProvider(deps: { speechToText: () => unknown }): void {
+export function ensureDshSpeechProvider(deps: { speechToText: () => unknown }): (() => void) | undefined {
   if (resolveSpeechProvider(DSH_SPEECH_PROVIDER_ID)) return;
-  registerSpeechProvider(createDshSpeechProvider(deps));
+  return registerSpeechProvider(createDshSpeechProvider(deps));
 }

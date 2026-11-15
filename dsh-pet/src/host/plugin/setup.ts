@@ -205,13 +205,13 @@ export function createHostSetup(ctx: HostSetupContext): HostSetup {
       register: registerBalanceProvider,
       list: listBalanceProviders,
     },
-    // 语音：第三方注册自己的合成实现，非空时合成走它、空则走内置 edge。
+    // 合成实现按 provider id 并存，调用时由限定音色 id 选择。
     // 同样只给 register（返回 disposer）与 list，不给 unregister。
     voice: {
       register: registerVoiceProvider,
       list: listCatalog,
     },
-    // 识别：与合成对称的一槽；注册后 /voice/hear 只走它，不再看宿主自带的 speechToText。
+    // 识别实现按 provider id 并存，调用时使用请求或配置中选择的实现。
     speech: {
       register: registerSpeechProvider,
       list: listSpeechCatalog,

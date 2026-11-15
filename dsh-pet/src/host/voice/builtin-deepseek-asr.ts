@@ -53,8 +53,9 @@ export function createDeepseekAsrProvider(deps: { resolveKey: ResolveKey }): Spe
  * 确保 DeepSeek ASR 实现在注册表里；重复调用无副作用（多次装配、热重载都会经过这里）。
  *
  * @param deps.resolveKey - 惰性取 API key。
+ * @returns 新注册的注销函数；已存在时不给予移除权限。
  */
-export function ensureDeepseekAsrProvider(deps: { resolveKey: ResolveKey }): void {
+export function ensureDeepseekAsrProvider(deps: { resolveKey: ResolveKey }): (() => void) | undefined {
   if (resolveSpeechProvider(DEEPSEEK_ASR_PROVIDER_ID)) return;
-  registerSpeechProvider(createDeepseekAsrProvider(deps));
+  return registerSpeechProvider(createDeepseekAsrProvider(deps));
 }

@@ -95,7 +95,9 @@ async function withDeadline<T>(
   const onAbort = (): void => controller.abort(signal?.reason);
   signal?.addEventListener('abort', onAbort, { once: true });
   let rejectAbort!: (reason: unknown) => void;
-  const cancelled = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    rejectAbort = reject;
+  });
   const onInnerAbort = (): void => rejectAbort(controller.signal.reason);
   controller.signal.addEventListener('abort', onInnerAbort, { once: true });
   try {

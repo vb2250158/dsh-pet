@@ -254,11 +254,17 @@ test('provider ignoring abort still settles at the deadline', { timeout: 1000 },
   const keepAlive = setTimeout(() => {}, 1200);
   t.after(() => clearTimeout(keepAlive));
   let seen: AbortSignal | undefined;
-  registerSpeechProvider({ id: 'ignores-abort', name: 'Synthetic provider', transcribe: ({ signal }) => {
-    seen = signal;
-    return new Promise<string>(() => {});
-  } });
-  const result = await createHearService({ configuredProvider: () => 'ignores-abort', timeoutMs: 5 }).hear({ audio: encode(AUDIO) });
+  registerSpeechProvider({
+    id: 'ignores-abort',
+    name: 'Synthetic provider',
+    transcribe: ({ signal }) => {
+      seen = signal;
+      return new Promise<string>(() => {});
+    },
+  });
+  const result = await createHearService({ configuredProvider: () => 'ignores-abort', timeoutMs: 5 }).hear({
+    audio: encode(AUDIO),
+  });
   assert.equal(result.ok, false);
   if (result.ok) return;
   assert.equal(result.reason, 'generate-error');
@@ -272,8 +278,18 @@ test('already cancelled input does not invoke either selected provider', async (
   caller.abort(new Error('request closed'));
   let calls = 0;
   for (const id of ['never-start', 'dsh']) {
-    registerSpeechProvider({ id, name: 'Synthetic provider', transcribe: async () => { calls++; return 'late'; } });
-    const result = await createHearService({ configuredProvider: () => id }).hear({ audio: encode(AUDIO) }, caller.signal);
+    registerSpeechProvider({
+      id,
+      name: 'Synthetic provider',
+      transcribe: async () => {
+        calls++;
+        return 'late';
+      },
+    });
+    const result = await createHearService({ configuredProvider: () => id }).hear(
+      { audio: encode(AUDIO) },
+      caller.signal,
+    );
     assert.equal(result.ok, false);
     if (!result.ok) assert.match(result.message, /request closed/);
     assert.equal(calls, 0);
@@ -284,12 +300,23 @@ test('caller cancellation settles before a late rejection and releases its liste
   const caller = new AbortController();
   let rejectLate!: (reason: Error) => void;
   let entered!: () => void;
-  const started = new Promise<void>((resolve) => { entered = resolve; });
-  registerSpeechProvider({ id: 'late-reject', name: 'Synthetic provider', transcribe: () => {
-    entered();
-    return new Promise<string>((_resolve, reject) => { rejectLate = reject; });
-  } });
-  const pending = createHearService({ configuredProvider: () => 'late-reject' }).hear({ audio: encode(AUDIO) }, caller.signal);
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  registerSpeechProvider({
+    id: 'late-reject',
+    name: 'Synthetic provider',
+    transcribe: () => {
+      entered();
+      return new Promise<string>((_resolve, reject) => {
+        rejectLate = reject;
+      });
+    },
+  });
+  const pending = createHearService({ configuredProvider: () => 'late-reject' }).hear(
+    { audio: encode(AUDIO) },
+    caller.signal,
+  );
   await started;
   caller.abort(new Error('request closed'));
   assert.equal((await pending).ok, false);
@@ -301,8 +328,18 @@ test('caller cancellation settles before a late rejection and releases its liste
 test('successful recognition clears the deadline timer and abort listeners', async () => {
   const caller = new AbortController();
   let seen: AbortSignal | undefined;
-  registerSpeechProvider({ id: 'immediate', name: 'Synthetic provider', transcribe: async ({ signal }) => { seen = signal; return 'done'; } });
-  const result = await createHearService({ configuredProvider: () => 'immediate', timeoutMs: 5 }).hear({ audio: encode(AUDIO) }, caller.signal);
+  registerSpeechProvider({
+    id: 'immediate',
+    name: 'Synthetic provider',
+    transcribe: async ({ signal }) => {
+      seen = signal;
+      return 'done';
+    },
+  });
+  const result = await createHearService({ configuredProvider: () => 'immediate', timeoutMs: 5 }).hear(
+    { audio: encode(AUDIO) },
+    caller.signal,
+  );
   assert.deepEqual(result, { ok: true, text: 'done' });
   assert.equal(getEventListeners(caller.signal, 'abort').length, 0);
   assert.equal(getEventListeners(seen!, 'abort').length, 0);

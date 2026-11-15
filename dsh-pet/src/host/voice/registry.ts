@@ -28,7 +28,10 @@ export function registerVoiceProvider(def: VoiceProvider): () => void {
   validateVoiceProvider(def);
   if (providers.has(def.id)) throw new TypeError(`provider id 已被注册: ${def.id}`);
   providers.set(def.id, def);
+  let released = false;
   return () => {
+    if (released) return;
+    released = true;
     if (providers.get(def.id) === def) providers.delete(def.id);
   };
 }
