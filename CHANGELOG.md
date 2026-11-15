@@ -1,3 +1,8 @@
+# 0.4.9-fork.2
+
+- 0.4.9-fork.2 在 DeepSeek ASR multipart 边界复制音频视图，保持选中字节，修复正常 Git prepare 的 BlobPart 类型声明构建失败。正式版本仍为0.4.5-fork.12，新界面等待验收。
+- 0.4.9-fork.2 copies the selected audio view at the DeepSeek ASR multipart boundary, preserving its bytes and fixing the BlobPart declaration build during normal Git preparation. GUI acceptance remains pending.
+
 # 0.4.9-fork.1
 
 - 纳入多槽TTS/ASR目录、内置Edge/DSH/DeepSeek实现、天气城市选择和独立模式服务商分栏。上游独立metrics站点部署由其原拥有者维护。

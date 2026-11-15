@@ -1,3 +1,7 @@
+0.4.9-fork.2 在 DeepSeek ASR multipart 边界复制音频视图，保持选中字节，修复正常 Git prepare 的 BlobPart 类型声明构建失败。正式版本仍为0.4.5-fork.12，新界面等待验收。
+
+0.4.9-fork.2 copies the selected audio view at the DeepSeek ASR multipart boundary, preserving its bytes and fixing the BlobPart declaration build during normal Git preparation. GUI acceptance remains pending.
+
 `0.4.9-fork.1` 同步多服务商语音合成与识别、DeepSeek语音适配、天气城市覆盖及独立模式服务商配置。已有Edge音色读取为带provider前缀的同一选择；内置语音注册由插件effect持有并释放，重复旧注销保留新注册。保留助手/Rabi、请求记录、显示租约和同文气泡撤销修复。受测宿主为Core549/rc.1，正式仍为0.4.5-fork.12；新设置与原生Helper界面等待GUI验收。
 
 `0.4.9-fork.1` integrates eleven plugin/shared-standalone updates through572cf0f. Saved Edge voices retain their selected identity through qualified IDs. Built-in voice registrations follow plugin effect disposal, and repeated old cleanup preserves replacements. The candidate targets Core549/rc.1 and awaits its fixed-Git combination and applicable GUI acceptance.

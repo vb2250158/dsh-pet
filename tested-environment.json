@@ -13,7 +13,7 @@
     "pnpm": "11.28.5"
   },
   "candidate": {
-    "pluginVersion": "0.4.9-fork.1",
+    "pluginVersion": "0.4.9-fork.2",
     "status": "Source Web candidate; actual browser and native Helper GUI acceptance remains paused",
     "upstreamCommit": "572cf0ff68e7ffbe76afe4ba5fd8ae99ec7e0733",
     "integration": "Eleven plugin/shared-standalone changes from the twelve-commit upstream increment. Upstream metrics-site deployment retains its separate owner. Preserved maintained Helper/Rabi/display leases, request persistence and utterance dismissal; migrated saved Edge voice selections and owned built-in speech provider disposal.",
@@ -115,7 +115,7 @@
     "changedEslint": true,
     "changedHelperNoUndef": true,
     "fullCombinationAccepted": false,
-    "sourceVersion": "0.4.9-fork.1",
+    "sourceVersion": "0.4.9-fork.2",
     "priorBubbleLifecycleReused": true,
     "newOwnerRegressionTests": {
       "passed": 8,

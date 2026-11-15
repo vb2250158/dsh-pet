@@ -33,7 +33,7 @@ export function createDeepseekAsrProvider(deps: { resolveKey: ResolveKey }): Spe
       if (!key) throw new SpeechUnavailableError('DEEPSEEK_API_KEY is not configured');
       const form = new FormData();
       // 官方按文件内容检测格式，这里的 MIME 只影响服务端选路；端侧产出的就是 WAV
-      form.append('file', new Blob([audio], { type: 'audio/wav' }), 'speech.wav');
+      form.append('file', new Blob([new Uint8Array(audio)], { type: 'audio/wav' }), 'speech.wav');
       const res = await fetch(ASR_ENDPOINT, {
         method: 'POST',
         headers: { authorization: `Bearer ${key}` },

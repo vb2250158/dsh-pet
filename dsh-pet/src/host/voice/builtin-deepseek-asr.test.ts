@@ -114,3 +114,22 @@ test('ensure：注册一次，重复调用不覆盖', () => {
   ensureDeepseekAsrProvider({ resolveKey: async () => 'other' });
   assert.equal(resolveSpeechProvider(DEEPSEEK_ASR_PROVIDER_ID), first);
 });
+
+test('请求：共享缓冲区的音频视图只上传选中字节', async () => {
+  const backing = new Uint8Array(new SharedArrayBuffer(5));
+  backing.set([99, 1, 2, 3, 88]);
+  const audio = backing.subarray(1, 4);
+  const stub = stubFetch(() => new Response(JSON.stringify({ text: '' }), { status: 200 }));
+  try {
+    await providerWithKey('secret').transcribe({ audio });
+    const form = stub.calls[0]?.init.body;
+    assert(form instanceof FormData);
+    const file = form.get('file');
+    assert(file instanceof Blob);
+    assert.equal(file.type, 'audio/wav');
+    assert.deepEqual(new Uint8Array(await file.arrayBuffer()), AUDIO);
+    assert.deepEqual(backing, new Uint8Array([99, 1, 2, 3, 88]));
+  } finally {
+    stub.restore();
+  }
+});
