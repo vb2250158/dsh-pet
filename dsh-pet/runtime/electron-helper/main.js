@@ -50,6 +50,7 @@ const { createBridge } = require('./main/bridge.js');
 const { createTray } = require('./main/tray.js');
 const { createWindows } = require('./main/windows.js');
 const { registerIpc } = require('./main/ipc.js');
+const { createForegroundBrowser } = require('./main/foreground-browser.js');
 const { createDisplaySync } = require('./main/displays.js');
 const { dshHomeDir, resolveUserDataDir } = require('./main/user-data.js');
 
@@ -245,6 +246,12 @@ const tray = createTray({
 });
 
 /**
+ * 前台浏览器追踪：右键菜单「打开网站」按「用户刚才在用的浏览器」打开，而不是一律丢给默认浏览器。
+ * 只有 Windows 有可用的前台窗口查询，其他平台 start() 直接返回，openSite 会回退默认浏览器。
+ */
+const foregroundBrowser = createForegroundBrowser({ platform: process.platform });
+
+/**
  * 应用模式的重建钩子：同进程里没有「重启 helper 进程」这条路，宿主改完显示位置会调它——
  * 关窗 → 按新的 DSH_PET_PETS 重建 → 刷新托盘勾选。
  * 双进程模式不注册：那边重启进程本身就是重建，注册了反而多一条没人走的路径。
@@ -297,6 +304,7 @@ app.whenReady().then(() => {
   void tray.start();
 
   linuxPointer?.start();
+  foregroundBrowser.start();
   petWindows.create();
 
   // 合盖/唤醒是任务栏按钮重建最集中的时刻：resume / unlock-screen 后把每只宠物重新摘一次。
@@ -307,7 +315,15 @@ app.whenReady().then(() => {
   powerMonitor.on('resume', reassertTaskbar);
   powerMonitor.on('unlock-screen', reassertTaskbar);
 
-  registerIpc({ ipcMain, petWindows, shell, openTarget: OPEN_TARGET, petRoute: PET_ROUTE, siteOrigin: ORIGIN });
+  registerIpc({
+    ipcMain,
+    petWindows,
+    shell,
+    openTarget: OPEN_TARGET,
+    petRoute: PET_ROUTE,
+    siteOrigin: ORIGIN,
+    lastActiveBrowserExe: () => foregroundBrowser.lastBrowserExe(),
+  });
   createDisplaySync({ screen, petWindows, dpi });
 
   // 冒烟自检（默认关闭）：DSH_PET_SMOKE=1 时延时截图到 DSH_PET_SMOKE_OUT 后退出，
@@ -325,6 +341,7 @@ app.whenReady().then(() => {
 // 退出时销毁托盘图标：不销毁会在 Windows 通知区留下「幽灵图标」（鼠标划过才消失）。
 // 宿主改 display 时是 SIGTERM/SIGKILL 硬杀，Windows 上拦不到，所以这条只覆盖优雅退出。
 app.on('before-quit', () => {
+  foregroundBrowser.stop();
   petWindows.stopTaskbarWatchdog();
   if (!tray.exists()) return;
   try {

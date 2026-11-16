@@ -1,4 +1,5 @@
 'use strict';
+const { spawn } = require('node:child_process');
 const { BrowserWindow, desktopCapturer, screen } = require('electron');
 const { decideWindowIgnore } = require('../pointer-target.js');
 /**
@@ -15,9 +16,10 @@ const { decideWindowIgnore } = require('../pointer-target.js');
  * @param deps.petWindows - 窗口能力（state 与方法）。
  * @param deps.shell - Electron shell（打开站点）。
  * @param deps.openTarget - 菜单首项的去向：desktop 唤起桌面应用；其余形态交给默认浏览器打开已鉴权地址。
+ * @param deps.lastActiveBrowserExe - 最近激活的浏览器可执行文件（拿不到时返回 undefined）。
  * @param deps.petRoute - 宠物路由前缀。
  */
-function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute, siteOrigin }) {
+function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute, siteOrigin, lastActiveBrowserExe }) {
   // 宠物窗口跟随：renderer 逐帧上报窗口内容区位置/尺寸
   ipcMain.on('pet:set-bounds', (event, bounds) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -130,8 +132,39 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute, siteOri
     win.webContents.focus();
   });
 
-  // 右键菜单首项（打开软件 / 打开 AI 设置 / 打开网站）：交给系统默认浏览器（等效网页里 Ctrl+点击链接），不建专属窗口——
+  // 右键菜单首项（打开软件 / 打开 AI 设置 / 打开网站）：不建专属窗口——
   // 宠物窗口是透明小窗，不该承载常规网页浏览。URL 由渲染端从 configUrl 推导。
+
+  /** 默认浏览器兜底：拿不到浏览器身份、或指定浏览器起不来时走这里，等效网页里 Ctrl+点击链接。 */
+  const openInDefaultBrowser = (target) => {
+    shell.openExternal(target).catch(() => {
+      console.error('[dsh-pet-desktop-helper] default browser could not open the site');
+    });
+  };
+
+  /**
+   * 用指定浏览器打开目标地址：传 URL 即可，已在运行的浏览器会自己新开一个标签并复用实例。
+   * 起不来时回退默认浏览器——spawn 的失败是异步的（error 事件），返回值只代表"已经开始尝试"。
+   * @param exePath - 浏览器可执行文件绝对路径。
+   * @param target - 已鉴权的目标地址。
+   * @returns 是否已发起启动（false 表示调用方应立即兜底）。
+   */
+  const openInBrowser = (exePath, target) => {
+    let child;
+    try {
+      child = spawn(exePath, [target], { detached: true, stdio: 'ignore', windowsHide: true });
+    } catch {
+      console.warn('[dsh-pet-desktop-helper] launch browser failed; using default browser');
+      return false;
+    }
+    child.once('error', () => {
+      console.warn('[dsh-pet-desktop-helper] launch browser unavailable; using default browser');
+      openInDefaultBrowser(target);
+    });
+    child.unref();
+    return true;
+  };
+
   const openSite = (url) => {
     // 宿主注入的已鉴权站点 URL（含本进程启动令牌）：DSH 只在 GET / 接受它并换发浏览器 Cookie，
     // 裸 origin 在默认浏览器里必然 401。令牌等价登录态，只在与目标同 origin 时启用，
@@ -151,9 +184,11 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute, siteOri
         /* 形状不对：保持裸地址（原行为） */
       }
     }
-    shell.openExternal(target).catch((error) => {
-      console.error('[dsh-pet-desktop-helper] openExternal failed:', error);
-    });
+    // 多浏览器场景按「用户刚才在用的那个」打开：否则会在另一份浏览器里新开一条未登录会话，
+    // 同一个站点出现两套 cookie。追踪不到（非 Windows / 采样未就绪 / 前台不是浏览器）就退回默认浏览器。
+    const exePath = typeof lastActiveBrowserExe === 'function' ? lastActiveBrowserExe() : undefined;
+    if (typeof exePath === 'string' && exePath !== '' && openInBrowser(exePath, target)) return;
+    openInDefaultBrowser(target);
   };
 
   // 应用自注册的 dsh:// 协议：已运行时把主窗口提到前台，未运行则直接把应用拉起来。
