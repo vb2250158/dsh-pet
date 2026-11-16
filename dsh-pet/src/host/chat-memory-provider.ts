@@ -8,6 +8,7 @@
  */
 import type { MemeEntry } from './memes.ts';
 import type { WeatherFacts } from './time-context.ts';
+import type { ChatGenerateInput } from './chat.ts';
 
 /** 内置实现的 id；第三方不能占用它。 */
 export const NATIVE_MEMORY_ID = 'native';
@@ -65,6 +66,8 @@ export interface RecallRequest {
   /** 核心已经拼好的一份，provider 可直接用或整份替换。 */
   readonly prepared: ChatRequest;
   readonly raw: RawFacts;
+  /** Persist an optional model-based recall request through this active chat's owner. */
+  readonly recordRequest?: ChatGenerateInput['recordRequest'];
 }
 
 /** 落盘后交给 provider 的这一轮问答。 */

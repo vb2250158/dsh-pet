@@ -112,6 +112,8 @@ function imageInstruction(pool: MemeEntry[]): string {
 export interface ChatGenerateInput {
   /** Persist the final request before dispatch; rejection stops generation and fallback. */
   readonly recordRequest: (request: ChatModelRequest) => Promise<void>;
+  /** Cancel this call and prevent dispatching further candidates after its owner ends. */
+  readonly signal?: AbortSignal;
   /** 宿主上下文（注入 agentDefaultModel / llm）。 */
   readonly ctx: { agentDefaultModel: { currentSelection(): { provider: string; model: string } }; llm?: unknown };
   /** 人设提示词（whisperPrompt，与碎碎念共用同一人设）。 */
@@ -156,6 +158,7 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
   // 兜底文案与失败分支同源，避免两处字面量漂移
   let last: ChatGenerateResult = { ok: false, reason: 'generate-error', message: noTextReason(undefined) };
   for (const [i, sel] of candidates.entries()) {
+    if (input.signal?.aborted) return { ok: false, reason: 'generate-error', message: '对话生成已取消' };
     let result: ChatGenerateResult;
     try {
       result = await generateWith(ctx, {
@@ -168,12 +171,14 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
         actions,
         image,
         recordRequest: input.recordRequest,
+        signal: input.signal,
       });
     } catch (error) {
       if (!(error instanceof ChatRequestRecordingError)) throw error;
       return { ok: false, reason: 'generate-error', message: error.message };
     }
     if (result.ok) return result;
+    if (input.signal?.aborted) return result;
     last = result;
     // 回落要留痕：配的模型没生效时能在日志里看到原因（否则「我明明配了 A，怎么还是用 B」没法查）
     if (i + 1 < candidates.length) {
@@ -189,6 +194,7 @@ export async function generateChat(input: ChatGenerateInput): Promise<ChatGenera
 /** 单个候选模型的一次生成请求（候选链的一环）。 */
 interface GenerateOnce {
   readonly recordRequest: ChatGenerateInput['recordRequest'];
+  readonly signal?: AbortSignal;
   readonly llm: { stream(o: unknown): AsyncIterable<unknown> };
   readonly sel: ModelRef;
   readonly system: string;
@@ -218,11 +224,13 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
         }),
   );
 
-  const deadline = AbortSignal.timeout(TIMEOUT_MS);
+  const timeout = AbortSignal.timeout(TIMEOUT_MS);
+  const deadline = once.signal === undefined ? timeout : AbortSignal.any([timeout, once.signal]);
   // 仅当模型声明支持 reasoning effort（含 "off"）时才传，否则省略：
   // 无 reasoning 元数据的模型显式传 off 会被 dsh-llm 判为 UNSUPPORTED_REASONING_EFFORT，
   // 折叠成空流（表现为「模型未返回文本」）。
   const supportsOff = await supportsReasoningOff(ctx, sel.provider, sel.model);
+  if (deadline.aborted) return { ok: false, reason: 'generate-error', message: '对话生成已取消' };
   // 配图 / 动作：各自的清单非空才把指令附进 user 正文（空 = 该功能关闭）。
   // 顺序固定「配图在前、动作在后」：配图是既有行为，新增的动作排在它后面，不改既有提示词的位置。
   const wantImage = pool.length > 0;
@@ -273,6 +281,7 @@ async function generateWith(ctx: { llm?: unknown }, once: GenerateOnce): Promise
   }
 
   const assembler = new BlockAssembler();
+  if (deadline.aborted) return { ok: false, reason: 'generate-error', message: '对话生成已取消' };
   try {
     for await (const chunk of llm.stream(options)) {
       assembler.push(chunk as Parameters<BlockAssembler['push']>[0]);

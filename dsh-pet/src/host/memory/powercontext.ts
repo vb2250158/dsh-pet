@@ -50,6 +50,10 @@ export interface RewriteInput {
   readonly userText: string;
   /** 最近 {@link REWRITE_HISTORY_ROUNDS} 轮的原文（按时间正序）；没有历史时为空。 */
   readonly history: readonly ChatTurn[];
+  /** The query budget and caller cancellation share this signal. */
+  readonly signal: AbortSignal;
+  /** Present only while the calling chat can durably record a model request. */
+  readonly recordRequest?: RecallRequest['recordRequest'];
 }
 
 /** 装配层注入的依赖：配置读取与可选的查询改写。 */
@@ -122,18 +126,23 @@ export function createPowerContextMemory(deps: PowerContextDeps): ChatMemoryProv
   };
 
   /** 查询串：改写优先（带最近两轮还原指代），没有就用原话；按字节截断，服务端限 8192。 */
-  const buildQuery = async (req: RecallRequest): Promise<string> => {
-    const rewritten = await rewriteWithin(deps.rewrite, {
-      userText: req.userText,
-      history: req.prepared.history.slice(-REWRITE_HISTORY_ROUNDS * 2),
-    });
+  const buildQuery = async (req: RecallRequest, signal: AbortSignal): Promise<string> => {
+    const rewritten = await rewriteWithin(
+      deps.rewrite,
+      {
+        userText: req.userText,
+        history: req.prepared.history.slice(-REWRITE_HISTORY_ROUNDS * 2),
+        recordRequest: req.recordRequest,
+      },
+      signal,
+    );
     return truncateBytes(rewritten ?? req.userText, QUERY_BYTES);
   };
 
-  const recall = async (req: RecallRequest): Promise<ChatRequest | undefined> => {
+  const recall = async (req: RecallRequest, signal: AbortSignal): Promise<ChatRequest | undefined> => {
     const scopeId = await ensureScope(req.petId);
     if (scopeId === undefined) return undefined;
-    const query = await buildQuery(req);
+    const query = await buildQuery(req, signal);
     if (query === '') return undefined;
     const hits = await search(deps, scopeId, query);
     if (hits === undefined || hits.length === 0) return undefined;
@@ -176,10 +185,11 @@ export function createPowerContextMemory(deps: PowerContextDeps): ChatMemoryProv
  * 已经注册过时直接返回，不去覆盖同 id 的另一份。
  *
  * @param deps - 地址与令牌的读取口，外加可选的查询改写。
+ * @returns 本次注册的注销函数；已有实现时不取得它的移除权限。
  */
-export function ensurePowerContextMemory(deps: PowerContextDeps): void {
+export function ensurePowerContextMemory(deps: PowerContextDeps): (() => void) | undefined {
   if (resolveChatMemoryProvider(POWERCONTEXT_MEMORY_ID).id === POWERCONTEXT_MEMORY_ID) return;
-  registerChatMemoryProvider(createPowerContextMemory(deps));
+  return registerChatMemoryProvider(createPowerContextMemory(deps));
 }
 
 /** 一次出站请求。 */
@@ -294,14 +304,18 @@ function evidenceLine(kind: string, text: string): string {
 }
 
 /** 在预算内改写查询；超时、抛错、返回空串都当没改写。 */
-async function rewriteWithin(rewrite: PowerContextDeps['rewrite'], input: RewriteInput): Promise<string | undefined> {
+async function rewriteWithin(
+  rewrite: PowerContextDeps['rewrite'],
+  input: Omit<RewriteInput, 'signal'>,
+  parentSignal: AbortSignal,
+): Promise<string | undefined> {
   if (rewrite === undefined) return undefined;
-  const budget = AbortSignal.timeout(REWRITE_BUDGET_MS);
+  const budget = AbortSignal.any([AbortSignal.timeout(REWRITE_BUDGET_MS), parentSignal]);
   const deadline = new Promise<undefined>((resolve) => {
     budget.addEventListener('abort', () => resolve(undefined), { once: true });
   });
   const attempt = Promise.resolve()
-    .then(() => rewrite(input))
+    .then(() => (budget.aborted ? undefined : rewrite({ ...input, signal: budget })))
     .catch(() => undefined);
   const text = await Promise.race([attempt, deadline]);
   if (typeof text !== 'string') return undefined;

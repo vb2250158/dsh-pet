@@ -168,6 +168,20 @@ export function createChatMemory(deps: ChatMemoryInput) {
     await rename(temporaryPath, memoryPath);
   };
 
+  /** Resolve the same writable entry for request recording and successful-turn persistence. */
+  const memoryEntry = (mem: MemoryFile, entryKey: string, petId: string): ChatMemoryEntry => {
+    const bucket =
+      mem[entryKey] && typeof mem[entryKey] === 'object' && !Array.isArray(mem[entryKey])
+        ? mem[entryKey]
+        : (mem[entryKey] = {});
+    const existing = bucket[petId];
+    if (existing && Array.isArray(existing.messages)) return existing;
+    if (existing !== undefined) {
+      log.error(`[dsh-pet] 记忆结构异常（messages 不是数组）pet=${petId}，按新会话处理：${memoryPath}`);
+    }
+    return (bucket[petId] = { messages: [] });
+  };
+
   /** 把一次读写封进串行队列（同进程内防交错），返回 fn 的结果 */
   const withMemoryLock = <T>(fn: () => Promise<T>): Promise<T> => {
     const run = chatQueue.then(fn, fn);
@@ -393,7 +407,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
    * 把这一轮写回 memory.json；生成期间历史被删过就整轮丢弃。
    *
    * @param args - 本轮问答、所属条目与开始时的删除代数。
-   * @returns 是否真的写入。
+   * @returns 成功保存的最终轮次时间戳；生成期间已删除历史时为 undefined。
    */
   const writeTurn = (args: {
     petId: string;
@@ -401,46 +415,41 @@ export function createChatMemory(deps: ChatMemoryInput) {
     text: string;
     reply: GeneratedTurn;
     image?: PetImageRef;
-    ts: number;
     epochAtStart: number;
     attemptIds: readonly string[];
-  }): Promise<boolean> =>
+  }): Promise<number | undefined> =>
     withMemoryLock(async () => {
-      if ((deletedEpoch.get(args.petId) ?? 0) !== args.epochAtStart) return false;
+      if ((deletedEpoch.get(args.petId) ?? 0) !== args.epochAtStart) return undefined;
       const mem = await readMemory();
-      // 坏结构（数组/标量）按空桶重建；messages 不是数组的条目按新会话处理，避免 push 到坏对象上崩溃
-      const bucket =
-        mem[args.entryKey] && typeof mem[args.entryKey] === 'object' && !Array.isArray(mem[args.entryKey])
-          ? mem[args.entryKey]
-          : (mem[args.entryKey] = {});
-      const existing = bucket[args.petId];
-      if (existing !== undefined && (!existing || !Array.isArray(existing.messages))) {
-        log.error(`[dsh-pet] 记忆结构异常（messages 不是数组）pet=${args.petId}，按新会话处理：${memoryPath}`);
-      }
-      const entry = existing && Array.isArray(existing.messages) ? existing : (bucket[args.petId] = { messages: [] });
+      const entry = memoryEntry(mem, args.entryKey, args.petId);
+      const previousTs = entry.messages.reduce(
+        (last, message) => (Number.isFinite(message.ts) ? Math.max(last, message.ts) : last),
+        0,
+      );
+      const turnTs = Math.max(Date.now(), previousTs + 1);
       const attemptIds = new Set(args.attemptIds);
       for (const attempt of entry.requests ?? []) {
-        if (attempt.id !== undefined && attemptIds.has(attempt.id)) attempt.turnTs = args.ts;
+        if (attempt.id !== undefined && attemptIds.has(attempt.id)) attempt.turnTs = turnTs;
       }
       // 用户上传的图只存不送：记忆要能还原「这一轮带过图」（聊天记录存档），但不把图本体重发给模型；
       // AI 配的图只回填名称标记（见 chat.ts 的 historyMarkersOf），同样不带图本体。
       entry.messages.push({
         role: 'user',
         content: args.text,
-        ts: args.ts,
+        ts: turnTs,
         ...(args.image ? { image: args.image } : {}),
       });
       entry.messages.push({
         role: 'assistant',
         content: args.reply.text,
-        ts: args.ts,
+        ts: turnTs,
         ...(args.reply.image ? { meme: args.reply.image } : {}),
         // 动作名与配图名同类：落盘只存名字，回放历史时由 chat.ts 以 [动作:名] 回填——
         // 否则模型记不得自己演过什么，用户说「换一个」它无从判断
         ...(args.reply.action ? { action: args.reply.action } : {}),
       });
       await writeMemory(mem);
-      return true;
+      return turnTs;
     });
 
   /** 与某只宠物对话：读上下文 → 召回 → 生成 → 写回 → 通知；生成期间历史被删则丢弃本轮写回。 */
@@ -475,51 +484,26 @@ export function createChatMemory(deps: ChatMemoryInput) {
           '（模型不支持读图时内核会以占位文本代替）',
       );
     }
-    // 记忆：核心先拼一份完整请求体，provider 可整份替换，也可原样交回。
-    const prepared: ChatRequest = {
-      system,
-      history: list.map(({ role, content, ts }) => ({ role, content, ts })),
-      userText: text,
-    };
-    const festival = festivalOf(new Date());
-    const body =
-      (await recallChat(provider, {
-        petId,
-        userText: text,
-        prepared,
-        raw: {
-          persona: petPersona(found.conf, found.pet),
-          now: Date.now(),
-          env,
-          ...(festival === '' ? {} : { festival }),
-          memes: pool,
-          actions,
-          pet: {
-            id: String(found.pet.id ?? petId),
-            name: String(found.pet.name ?? ''),
-            entry: found.entry,
-            display: String(found.pet.display ?? ''),
-          },
-        },
-      })) ?? prepared;
-    // 模型：条目配置的 chatModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
     const attemptIds: string[] = [];
-    try {
-    const generated = await generateChat({
-      recordRequest: (request) => withMemoryLock(async () => {
+    let recordingOpen = true;
+    const recordRequest = (request: ChatModelRequest): Promise<void> =>
+      withMemoryLock(async () => {
+        if (!recordingOpen) throw new ChatRequestRecordingError('对话已结束，未调用模型');
         if ((deletedEpoch.get(petId) ?? 0) !== epochAtStart) {
           throw new ChatRequestRecordingError('对话历史已删除，未调用模型');
         }
         const mem = await readMemory();
-        const bucket = mem[found.entry] ?? (mem[found.entry] = {});
-        const entry = bucket[petId] ?? (bucket[petId] = { messages: [] });
+        if (!recordingOpen) throw new ChatRequestRecordingError('对话已结束，未调用模型');
+        const entry = memoryEntry(mem, found.entry, petId);
         const id = randomUUID();
         const record: ChatRequestRecord = { version: 1, id, time: Date.now(), request };
         const requests = [...(entry.requests ?? []), record];
         // Every in-flight request reserves the largest possible turn timestamp before the model starts.
-        const reserved = requests.map((item) => item.id === id || (item.id !== undefined && pendingAttemptIds.has(item.id))
-          ? { ...item, turnTs: Number.MAX_SAFE_INTEGER }
-          : item);
+        const reserved = requests.map((item) =>
+          item.id === id || (item.id !== undefined && pendingAttemptIds.has(item.id))
+            ? { ...item, turnTs: Number.MAX_SAFE_INTEGER }
+            : item,
+        );
         const limit = Number(found.conf.chatRequestLimitBytes);
         if (!Number.isSafeInteger(limit) || limit <= 0) {
           throw new ChatRequestRecordingError('chatRequestLimitBytes 必须是正整数字节数，未调用模型');
@@ -531,71 +515,103 @@ export function createChatMemory(deps: ChatMemoryInput) {
         }
         entry.requests = requests;
         await writeMemory(mem);
+        if (!recordingOpen) throw new ChatRequestRecordingError('对话已结束，未调用模型');
         pendingAttemptIds.add(id);
         attemptIds.push(id);
-      }),
-      ctx,
-      system: body.system,
-      history: body.history,
-      userText: body.userText,
-      pool,
-      actions,
-      preferred: configuredModel(found.conf, 'chatModel'),
-      image,
-    });
-    if (!generated.ok) return generated;
-    const now = Date.now();
-    // 写回再读一次拿最新内容，占一次短锁；生成期间历史被删过（代数变了）就整轮丢弃。
-    const persisted = await writeTurn({
-      petId,
-      entryKey: found.entry,
-      text,
-      reply: {
-        text: generated.text,
-        ...(generated.image !== undefined ? { image: generated.image } : {}),
-        ...(generated.action !== undefined ? { action: generated.action } : {}),
-      },
-      ...(image === undefined ? {} : { image }),
-      ts: now,
-      epochAtStart,
-      attemptIds,
-    });
-    if (persisted) {
-      // 第三方记忆：落盘后异步接收；不等待、失败只记日志，不能影响这一轮回复。
-      captureTurn(provider, {
-        petId,
+      });
+    try {
+      // 记忆：核心先拼一份完整请求体，provider 可整份替换，也可原样交回。
+      const prepared: ChatRequest = {
+        system,
+        history: list.map(({ role, content, ts }) => ({ role, content, ts })),
         userText: text,
-        replyText: generated.text,
-        ts: now,
-        ...(generated.action !== undefined ? { action: generated.action } : {}),
-        ...(generated.image !== undefined ? { image: generated.image } : {}),
+      };
+      const festival = festivalOf(new Date());
+      const body =
+        (await recallChat(provider, {
+          petId,
+          userText: text,
+          prepared,
+          recordRequest,
+          raw: {
+            persona: petPersona(found.conf, found.pet),
+            now: Date.now(),
+            env,
+            ...(festival === '' ? {} : { festival }),
+            memes: pool,
+            actions,
+            pet: {
+              id: String(found.pet.id ?? petId),
+              name: String(found.pet.name ?? ''),
+              entry: found.entry,
+              display: String(found.pet.display ?? ''),
+            },
+          },
+        })) ?? prepared;
+      // 模型：条目配置的 chatModel 优先（留空 = 不指定）；生成侧失败会回落到当前对话的模型重试一次
+      const generated = await generateChat({
+        recordRequest,
+        ctx,
+        system: body.system,
+        history: body.history,
+        userText: body.userText,
+        pool,
+        actions,
+        preferred: configuredModel(found.conf, 'chatModel'),
+        image,
       });
-    } else {
-      // 用户在生成期间删了历史：本轮不落盘、不通知第三方，回复照常返回。
-      log.info('[dsh-pet] 生成期间历史被删除，跳过写回与接收 pet=' + petId);
-    }
-    // 动作先写：与 POST /anim 同一条写回链路（记录 + anim 叶子），渲染端据此播放并回报执。
-    if (generated.action !== undefined) {
-      const record = playback.create(petId, generated.action);
-      state.writePet(petId, 'anim', { name: generated.action, playbackId: record.playbackId });
-    }
-    // 回复写进 S（与碎碎念同一个叶子：前端本来就是同一条展示链路）。
-    // 该由哪一端念按这只宠物的 display 推：对话请求带的是 surface=any，本来就没有具体的一端可用。
-    // 对话回复归「手动播报」：用户发了消息才有的这一句，由 voiceEnabled 决定念不念。
-    const replyVoiceTo = cfg.main?.voiceEnabled === true ? voiceTargetFor(found.pet) : undefined;
-    // 只有动作没有正文（模型只写了标记）→ 不写 say，避免弹一个空气泡。
-    if (generated.text !== '') {
-      state.writePet(petId, 'say', {
-        text: generated.text,
-        ...(generated.image ? { image: generated.image } : {}),
-        // 带动作时显式关掉碎碎念动画：气泡照弹，但不把刚点播的动作顶掉
-        ...(generated.action !== undefined ? { anim: false } : {}),
-        ...(replyVoiceTo ? { voiceTo: replyVoiceTo } : {}),
+      if (!generated.ok) return generated;
+      // 写回再读一次拿最新内容，占一次短锁；生成期间历史被删过（代数变了）就整轮丢弃。
+      const persisted = await writeTurn({
+        petId,
+        entryKey: found.entry,
+        text,
+        reply: {
+          text: generated.text,
+          ...(generated.image !== undefined ? { image: generated.image } : {}),
+          ...(generated.action !== undefined ? { action: generated.action } : {}),
+        },
+        ...(image === undefined ? {} : { image }),
+        epochAtStart,
+        attemptIds,
       });
-    }
-    // 同一份文本随返回值带出（叶子照写，不是二选一）
-    return { ok: true as const, text: generated.text, ...(generated.image ? { image: generated.image } : {}) };
+      if (persisted !== undefined) {
+        // 第三方记忆：落盘后异步接收；不等待、失败只记日志，不能影响这一轮回复。
+        captureTurn(provider, {
+          petId,
+          userText: text,
+          replyText: generated.text,
+          ts: persisted,
+          ...(generated.action !== undefined ? { action: generated.action } : {}),
+          ...(generated.image !== undefined ? { image: generated.image } : {}),
+        });
+      } else {
+        // 用户在生成期间删了历史：本轮不落盘、不通知第三方，回复照常返回。
+        log.info('[dsh-pet] 生成期间历史被删除，跳过写回与接收 pet=' + petId);
+      }
+      // 动作先写：与 POST /anim 同一条写回链路（记录 + anim 叶子），渲染端据此播放并回报执。
+      if (generated.action !== undefined) {
+        const record = playback.create(petId, generated.action);
+        state.writePet(petId, 'anim', { name: generated.action, playbackId: record.playbackId });
+      }
+      // 回复写进 S（与碎碎念同一个叶子：前端本来就是同一条展示链路）。
+      // 该由哪一端念按这只宠物的 display 推：对话请求带的是 surface=any，本来就没有具体的一端可用。
+      // 对话回复归「手动播报」：用户发了消息才有的这一句，由 voiceEnabled 决定念不念。
+      const replyVoiceTo = cfg.main?.voiceEnabled === true ? voiceTargetFor(found.pet) : undefined;
+      // 只有动作没有正文（模型只写了标记）→ 不写 say，避免弹一个空气泡。
+      if (generated.text !== '') {
+        state.writePet(petId, 'say', {
+          text: generated.text,
+          ...(generated.image ? { image: generated.image } : {}),
+          // 带动作时显式关掉碎碎念动画：气泡照弹，但不把刚点播的动作顶掉
+          ...(generated.action !== undefined ? { anim: false } : {}),
+          ...(replyVoiceTo ? { voiceTo: replyVoiceTo } : {}),
+        });
+      }
+      // 同一份文本随返回值带出（叶子照写，不是二选一）
+      return { ok: true as const, text: generated.text, ...(generated.image ? { image: generated.image } : {}) };
     } finally {
+      recordingOpen = false;
       for (const id of attemptIds) pendingAttemptIds.delete(id);
     }
   };

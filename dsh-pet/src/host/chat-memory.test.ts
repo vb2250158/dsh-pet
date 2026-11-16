@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import { createChatMemory, type ChatMemoryInput } from './plugin/chat-memory.ts';
-import type { ChatMemoryMessage } from './chat.ts';
+import { generateChat, type ChatMemoryMessage, type ChatModelRequest } from './chat.ts';
 import type { ConfigPaths } from './config.ts';
 import type { PetImageRef } from './image-attachment.ts';
 import { registerChatMemoryProvider, resetChatMemoryProviders, type ChatRequest } from './chat-memory-provider.ts';
@@ -78,9 +78,10 @@ function createMemory(
   contextOrObserver?: unknown,
 ) {
   return createChatMemory({
-    ctx: typeof contextOrObserver === 'function'
-      ? fakeCtx(reply, captured, (options) => contextOrObserver(options))
-      : contextOrObserver ?? fakeCtx(reply, captured),
+    ctx:
+      typeof contextOrObserver === 'function'
+        ? fakeCtx(reply, captured, (options) => contextOrObserver(options))
+        : (contextOrObserver ?? fakeCtx(reply, captured)),
     configPaths: ws.configPaths,
     log: { info: () => {}, warn: () => {}, error: () => {} },
     memeDirsFor: () => (memeDir === undefined ? [] : [memeDir]),
@@ -106,6 +107,7 @@ function userTextOf(options: Record<string, unknown> | undefined): string {
 /** Only synthetic request records are read by these regressions. */
 function readRequests(userRoot: string): Array<{
   version: number;
+  id?: string;
   time: number;
   turnTs?: number;
   request: Record<string, unknown>;
@@ -753,11 +755,249 @@ describe('createChatMemory —— 并发', () => {
 describe('模型实际请求持久化', () => {
   beforeEach(() => resetChatMemoryProviders());
 
+  test('并发回复按各自请求身份关联，逆序完成也保留全部落盘请求', async (t) => {
+    const captures: number[] = [];
+    registerChatMemoryProvider({
+      id: 'capture-turns',
+      name: 'Capture turns',
+      capture: (turn) => {
+        captures.push(turn.ts);
+      },
+    });
+    const ws = tempWorkspace({
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+      memory: {
+        provider: 'capture-turns',
+        powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false },
+      },
+    });
+    let bothEntered!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      bothEntered = resolve;
+    });
+    const releases = new Map<string, () => void>();
+    const now = Date.now();
+    t.mock.method(Date, 'now', () => now);
+    const ctx = {
+      agentDefaultModel: { currentSelection: () => ({ provider: 'test', model: 'test-model' }) },
+      llm: {
+        stream: (options: Record<string, unknown>) =>
+          (async function* () {
+            const text = userTextOf(options);
+            const gate = new Promise<void>((resolve) => {
+              releases.set(text, resolve);
+            });
+            if (releases.size === 2) bothEntered();
+            await gate;
+            yield { type: 'text-delta', index: 0, text: 'reply ' + text };
+          })(),
+      },
+    };
+    try {
+      const memory = createMemory('unused', ws, undefined, undefined, undefined, ctx);
+      const first = memory.chatWithPet('main', 'first');
+      const second = memory.chatWithPet('main', 'second');
+      await entered;
+      assert.equal(readRequests(ws.userRoot).length, 2);
+      releases.get('second')?.();
+      assert.equal((await second).ok, true);
+      releases.get('first')?.();
+      assert.equal((await first).ok, true);
+      const requests = readRequests(ws.userRoot);
+      assert.equal(new Set(requests.map((record) => record.id)).size, 2);
+      const messages = readMessages(ws.userRoot);
+      assert.equal(
+        new Set(messages.map((message) => message.ts)).size,
+        2,
+        'same-clock completions have distinct turn identities',
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(new Set(captures).size, 2);
+      assert.deepEqual([...captures].sort(), [...new Set(messages.map((message) => message.ts))].sort());
+      for (const request of requests) {
+        assert.equal(typeof request.id, 'string');
+        const message = messages.find((row) => row.role === 'user' && row.content === userTextOf(request.request));
+        assert.equal(request.turnTs, message?.ts);
+      }
+      const secondTs = messages.find((row) => row.role === 'user' && row.content === 'second')?.ts;
+      await memory.deleteHistory('main', [secondTs!]);
+      assert.equal(readRequests(ws.userRoot).length, 1);
+      assert.equal(userTextOf(readRequests(ws.userRoot)[0].request), 'first');
+    } finally {
+      for (const release of releases.values()) release();
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('召回超时后迟到的模型目录不会开启查询模型；结束后的记录回调拒绝写入', async () => {
+    const ws = tempWorkspace({
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+      memory: {
+        provider: 'late-query',
+        powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false },
+      },
+    });
+    let releaseAux!: () => void;
+    const auxGate = new Promise<void>((resolve) => {
+      releaseAux = resolve;
+    });
+    let releaseMain!: () => void;
+    const mainGate = new Promise<void>((resolve) => {
+      releaseMain = resolve;
+    });
+    let mainEntered!: () => void;
+    const mainStarted = new Promise<void>((resolve) => {
+      mainEntered = resolve;
+    });
+    let auxDone!: () => void;
+    const auxSettled = new Promise<void>((resolve) => {
+      auxDone = resolve;
+    });
+    const dispatched: string[] = [];
+    let metadataCalls = 0;
+    let retainedRecord: ((request: ChatModelRequest) => Promise<void>) | undefined;
+    const ctx = {
+      agentDefaultModel: { currentSelection: () => ({ provider: 'test', model: 'test-model' }) },
+      llm: {
+        resolveModelInfo: async () => {
+          metadataCalls++;
+          if (metadataCalls === 1) await auxGate;
+          else {
+            mainEntered();
+            await mainGate;
+          }
+          return {};
+        },
+        stream: (options: Record<string, unknown>) =>
+          (async function* () {
+            dispatched.push(userTextOf(options));
+            yield { type: 'text-delta', index: 0, text: 'synthetic reply' };
+          })(),
+      },
+    };
+    registerChatMemoryProvider({
+      id: 'late-query',
+      name: 'Late query',
+      timeoutMs: 20,
+      recall: async (request, signal) => {
+        retainedRecord = request.recordRequest;
+        assert(retainedRecord);
+        try {
+          await generateChat({
+            ctx,
+            recordRequest: retainedRecord,
+            signal,
+            system: 'synthetic rewrite',
+            history: [],
+            userText: 'auxiliary query',
+          });
+          return request.prepared;
+        } finally {
+          auxDone();
+        }
+      },
+    });
+    try {
+      const memory = createMemory('unused', ws, undefined, undefined, undefined, ctx);
+      const turn = memory.chatWithPet('main', 'main input');
+      await mainStarted;
+      releaseAux();
+      await auxSettled;
+      assert.equal(
+        dispatched.length,
+        0,
+        'aborted auxiliary request cannot dispatch while the main request is still waiting',
+      );
+      releaseMain();
+      assert.equal((await turn).ok, true);
+      assert.deepEqual(dispatched, ['main input']);
+      const before = readFileSync(join(ws.userRoot, 'memory.json'), 'utf8');
+      await assert.rejects(
+        () =>
+          retainedRecord!({
+            provider: 'test',
+            model: 'test-model',
+            sessionId: 'synthetic',
+            messages: [],
+            system: 'late',
+            temperature: 1,
+          }),
+        /对话已结束/,
+      );
+      assert.equal(readFileSync(join(ws.userRoot, 'memory.json'), 'utf8'), before);
+      assert.equal(readRequests(ws.userRoot).length, 1);
+    } finally {
+      releaseAux();
+      releaseMain();
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
+  test('可选查询模型与主回复共用持久请求拥有者及同一完成轮次', async () => {
+    const ws = tempWorkspace({
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+      memory: {
+        provider: 'recorded-query',
+        powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false },
+      },
+    });
+    let dispatched = 0;
+    const ctx = fakeCtx('synthetic reply', undefined, () => {
+      dispatched++;
+      assert.equal(
+        readRequests(ws.userRoot).length,
+        dispatched,
+        'each actual request is already durable at model dispatch',
+      );
+    }) as Parameters<typeof generateChat>[0]['ctx'];
+    registerChatMemoryProvider({
+      id: 'recorded-query',
+      name: 'Recorded query',
+      recall: async (request, signal) => {
+        assert(request.recordRequest);
+        const result = await generateChat({
+          ctx,
+          recordRequest: request.recordRequest,
+          signal,
+          system: 'synthetic auxiliary',
+          history: request.prepared.history,
+          userText: 'synthetic query',
+        });
+        assert.equal(result.ok, true);
+        return request.prepared;
+      },
+    });
+    try {
+      assert.equal(
+        (await createMemory('unused', ws, undefined, undefined, undefined, ctx).chatWithPet('main', 'actual input')).ok,
+        true,
+      );
+      const requests = readRequests(ws.userRoot);
+      assert.equal(dispatched, 2);
+      assert.equal(requests[0].request.system, 'synthetic auxiliary');
+      assert.equal(requests[0].turnTs, requests[1].turnTs);
+      assert.equal(requests[1].turnTs, readMessages(ws.userRoot)[0].ts);
+    } finally {
+      rmSync(ws.dir, { recursive: true, force: true });
+    }
+  });
+
   test('实际请求先落盘再调模型，召回后的三个字段可重建，且不保存 signal 或凭据', async () => {
-    const ws = tempWorkspace({ chatImageEnabled: false, chatAnimationEnabled: false });
+    const ws = tempWorkspace({
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+      memory: {
+        provider: 'synthetic-recall',
+        powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false },
+      },
+    });
     const captured: Record<string, unknown>[] = [];
     registerChatMemoryProvider({
       id: 'synthetic-recall',
+      name: 'Synthetic recall',
       recall: () => ({
         system: 'synthetic effective system',
         userText: 'synthetic effective user',
@@ -765,13 +1005,20 @@ describe('模型实际请求持久化', () => {
       }),
     });
     try {
-      const r = await createMemory('synthetic reply', ws, undefined, undefined, captured, (options) => {
-        const requests = readRequests(ws.userRoot);
-        assert.equal(requests.length, 1, 'request must already be durable at dispatch');
-        const { signal, ...visible } = options;
-        assert(signal instanceof AbortSignal);
-        assert.deepEqual(requests[0]?.request, JSON.parse(JSON.stringify(visible)));
-      }).chatWithPet('main', 'synthetic original user');
+      const r = await createMemory(
+        'synthetic reply',
+        ws,
+        undefined,
+        undefined,
+        captured,
+        (options: Record<string, unknown>) => {
+          const requests = readRequests(ws.userRoot);
+          assert.equal(requests.length, 1, 'request must already be durable at dispatch');
+          const { signal, ...visible } = options;
+          assert(signal instanceof AbortSignal);
+          assert.deepEqual(requests[0]?.request, JSON.parse(JSON.stringify(visible)));
+        },
+      ).chatWithPet('main', 'synthetic original user');
       assert.equal(r.ok, true);
       const request = readRequests(ws.userRoot)[0];
       assert.equal(request?.version, 1);
@@ -809,7 +1056,7 @@ describe('模型实际请求持久化', () => {
   test('适配器修改请求对象不会改写已持久化的实际输入', async () => {
     const ws = tempWorkspace({ chatImageEnabled: false, chatAnimationEnabled: false });
     try {
-      const memory = createMemory('reply', ws, undefined, undefined, undefined, (options) => {
+      const memory = createMemory('reply', ws, undefined, undefined, undefined, (options: Record<string, unknown>) => {
         options.system = 'synthetic adapter mutation';
         options.messages = [];
       });
@@ -830,13 +1077,20 @@ describe('模型实际请求持久化', () => {
     });
     const calls: string[] = [];
     try {
-      const r = await createMemory('fallback', ws, undefined, undefined, undefined, (options) => {
-        const requests = readRequests(ws.userRoot);
-        calls.push(String(options.provider));
-        assert.equal(requests.length, calls.length);
-        assert.equal(requests[requests.length - 1]?.request.provider, options.provider);
-        if (options.provider === 'synthetic-failed') throw new Error('synthetic model unavailable');
-      }).chatWithPet('main', 'retry');
+      const r = await createMemory(
+        'fallback',
+        ws,
+        undefined,
+        undefined,
+        undefined,
+        (options: Record<string, unknown>) => {
+          const requests = readRequests(ws.userRoot);
+          calls.push(String(options.provider));
+          assert.equal(requests.length, calls.length);
+          assert.equal(requests[requests.length - 1]?.request.provider, options.provider);
+          if (options.provider === 'synthetic-failed') throw new Error('synthetic model unavailable');
+        },
+      ).chatWithPet('main', 'retry');
       assert.equal(r.ok, true);
       assert.deepEqual(calls, ['synthetic-failed', 'test']);
       const requests = readRequests(ws.userRoot);
@@ -921,12 +1175,20 @@ describe('每宠物实际请求字节预算', () => {
     resetChatMemoryProviders();
     registerChatMemoryProvider({
       id: 'synthetic-budget',
+      name: 'Synthetic budget',
       recall: () => ({ system: '中文🙂', history: [], userText: '请求🌧' }),
     });
   });
 
   test('Unicode 按实际 UTF-8 计量，边界可保存，少一字节在调用前拒绝', async () => {
-    const overlay = { chatImageEnabled: false, chatAnimationEnabled: false };
+    const overlay = {
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+      memory: {
+        provider: 'synthetic-budget',
+        powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false },
+      },
+    };
     const ws = tempWorkspace(overlay);
     const calls: Record<string, unknown>[] = [];
     try {
@@ -962,6 +1224,10 @@ describe('每宠物实际请求字节预算', () => {
       chatImageEnabled: false,
       chatAnimationEnabled: false,
       chatModel: { provider: 'first', model: 'model' },
+      memory: {
+        provider: 'synthetic-budget',
+        powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false },
+      },
     };
     const ws = tempWorkspace(overlay);
     const calls: Record<string, unknown>[] = [];
@@ -987,7 +1253,15 @@ describe('每宠物实际请求字节预算', () => {
   });
 
   test('并发聊天串行计量，其他宠物独立；按轮删除后能继续', async () => {
-    const overlay = { chatImageEnabled: false, chatAnimationEnabled: false, pets: [{ id: 'main' }, { id: 'peer' }] };
+    const overlay = {
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+      pets: [{ id: 'main' }, { id: 'peer' }],
+      memory: {
+        provider: 'synthetic-budget',
+        powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false },
+      },
+    };
     const ws = tempWorkspace(overlay);
     const calls: Record<string, unknown>[] = [];
     try {
@@ -1015,7 +1289,14 @@ describe('每宠物实际请求字节预算', () => {
   });
 
   test('已有文件超过新预算时原样保留，提高正常配置预算后继续', async () => {
-    const overlay = { chatImageEnabled: false, chatAnimationEnabled: false };
+    const overlay = {
+      chatImageEnabled: false,
+      chatAnimationEnabled: false,
+      memory: {
+        provider: 'synthetic-budget',
+        powercontext: { endpoint: 'http://127.0.0.1:8000', token: '', optimizeQuery: false },
+      },
+    };
     const ws = tempWorkspace(overlay);
     const calls: Record<string, unknown>[] = [];
     try {

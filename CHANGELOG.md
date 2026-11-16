@@ -1,3 +1,13 @@
+# 0.4.9-fork.3
+
+`0.4.9-fork.3` 按提交合入上游六项记忆实现、PowerContext、拖拽弹簧和设置布局更新，保留现有助手、语音、显示租约与请求预算。召回和生成在文件锁外执行，实际模型请求经短锁先保存；并发同毫秒完成的轮次具有独立时间标识，消息、请求与记忆接收保持同一轮次。可选查询改写共用持久请求入口和取消信号，超时后停止开启查询模型请求。正式仍为 `0.4.5-fork.12`，实际 GUI 与新固定 Git 组合待验收。
+
+`0.4.9-fork.3` integrates six upstream memory, PowerContext, drag-spring and settings changes. Durable request recording retains its byte budget and per-turn ownership across concurrent completions. Optional query rewriting shares the request owner and cancellation signal. The formal Pet version remains `0.4.5-fork.12`; current GUI and immutable-Git combination acceptance are pending.
+
+Windows Helper 的“打开网站”优先使用最近前台浏览器的可执行路径。单个隐藏采样进程每800毫秒检查前台窗口，只在窗口变化时读取进程路径；退出时释放采样，旧进程的迟到事件不会覆盖新实例。打开失败会使用系统浏览器，鉴权网址保留在打开动作中，日志只记录固定错误说明。
+
+The Windows Helper opens the site through the last foreground browser executable when available. One hidden sampler checks the foreground window every800ms and reads process paths only after window changes. Owned shutdown and stale-event checks preserve replacement instances. Browser failures use the system browser and omit authenticated URLs from logs.
+
 # 0.4.9-fork.2
 
 - 0.4.9-fork.2 在 DeepSeek ASR multipart 边界复制音频视图，保持选中字节，修复正常 Git prepare 的 BlobPart 类型声明构建失败。正式版本仍为0.4.5-fork.12，新界面等待验收。

@@ -152,24 +152,30 @@ export function apply(ctx: any): void {
   // 长期记忆：PowerContext 是本机自建服务，地址与令牌来自配置。
   // 查询优化默认关闭——指代指向的通常是刚说过的话，那些轮次本来就在对话历史里；
   // 打开后才复用对话模型改写（空配图池加空动作名单 = 纯文本生成，不注入指令也不解析动作），并带上最近两轮。
-  ensurePowerContextMemory({
-    endpoint: () => powerContextField('endpoint'),
-    token: () => powerContextField('token'),
-    rewrite: async ({ userText, history }) => {
-      const conf = memoryBlock().powercontext;
-      const enabled = conf && typeof conf === 'object' && (conf as Record<string, unknown>).optimizeQuery === true;
-      if (!enabled) return undefined;
-      const result = await generateChat({
-        ctx,
-        system: REWRITE_QUERY_SYSTEM,
-        history,
-        userText,
-        pool: [],
-        actions: [],
-      });
-      return result.ok ? result.text : undefined;
-    },
-  });
+  ctx.effect(
+    () =>
+      ensurePowerContextMemory({
+        endpoint: () => powerContextField('endpoint'),
+        token: () => powerContextField('token'),
+        rewrite: async ({ userText, history, recordRequest, signal }) => {
+          const conf = memoryBlock().powercontext;
+          const enabled = conf && typeof conf === 'object' && (conf as Record<string, unknown>).optimizeQuery === true;
+          if (!enabled || recordRequest === undefined || signal.aborted) return undefined;
+          const result = await generateChat({
+            recordRequest,
+            signal,
+            ctx,
+            system: REWRITE_QUERY_SYSTEM,
+            history,
+            userText,
+            pool: [],
+            actions: [],
+          });
+          return result.ok ? result.text : undefined;
+        },
+      }),
+    'built-in PowerContext memory provider',
+  );
 
   const deps: PetRouteDeps = {
     ...setup,

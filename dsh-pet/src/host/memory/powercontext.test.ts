@@ -12,7 +12,30 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 
 import type { CaptureTurn, ChatRequest, ChatTurn, RecallRequest } from '../chat-memory-provider.ts';
-import { createPowerContextMemory } from './powercontext.ts';
+import { createPowerContextMemory, ensurePowerContextMemory } from './powercontext.ts';
+import {
+  registerChatMemoryProvider,
+  resetChatMemoryProviders,
+  resolveChatMemoryProvider,
+} from '../chat-memory-provider.ts';
+
+test('PowerContext registration releases only its own instance and reacquires fresh dependencies', async () => {
+  resetChatMemoryProviders();
+  const release = ensurePowerContextMemory({ endpoint: () => '', token: () => 'synthetic' });
+  const first = resolveChatMemoryProvider('powercontext');
+  assert.equal(first.id, 'powercontext');
+  assert.equal(ensurePowerContextMemory({ endpoint: () => '', token: () => 'other' }), undefined);
+  release?.();
+  assert.equal(resolveChatMemoryProvider('powercontext').id, 'native');
+  const replacement = createPowerContextMemory({ endpoint: () => '', token: () => 'replacement' });
+  const releaseReplacement = registerChatMemoryProvider(replacement);
+  release?.();
+  assert.equal(resolveChatMemoryProvider('powercontext'), replacement);
+  releaseReplacement();
+  const releaseNext = ensurePowerContextMemory({ endpoint: () => '', token: () => 'fresh' });
+  assert.notEqual(resolveChatMemoryProvider('powercontext'), first);
+  releaseNext?.();
+});
 
 /** 一次被记下的请求。 */
 interface Recorded {
@@ -330,14 +353,21 @@ describe('PowerContext —— 召回', () => {
   test('改写卡住 → 预算到点就用原话，不拖住对话', async () => {
     const stub = await startStub(defaultHandler());
     try {
+      let querySignal: AbortSignal | undefined;
       const provider = createPowerContextMemory({
         endpoint: () => stub.endpoint,
         token: () => '',
-        rewrite: () => new Promise<string>(() => {}),
+        rewrite: ({ signal }) => {
+          querySignal = signal;
+          return new Promise<string>((resolve) =>
+            signal.addEventListener('abort', () => resolve('late rewrite'), { once: true }),
+          );
+        },
       });
       const started = Date.now();
       await provider.recall?.(recallRequest('晚饭吃什么好'), new AbortController().signal);
       assert.ok(Date.now() - started < 2_000, '改写不能把召回拖到两秒以上');
+      assert.equal(querySignal?.aborted, true, 'query-model signal is canceled at the rewrite budget');
       const search = stub.requests.find((req) => req.path === '/v1/atomic-memory/search');
       assert.equal((search?.body as { query: string }).query, '晚饭吃什么好');
     } finally {

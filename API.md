@@ -55,6 +55,10 @@ dsh-pet 的宿主半侧向 DSH 自己的 Web 服务注册了**一条前缀路由
 | `POST /dsh-pet-7340/balance`           | 立即刷新一次余额（可见效果同样是弹气泡 + 档位动画）；带 `?pet=`（需 `surface=`）时只让这只弹，不带则所有开启余额的宠物都弹 |
 | `POST /dsh-pet-7340/environment`       | **查环境**：城市 + 天气；带 `?pet=`（需 `surface=`）时写进 `sections.env`，`?fresh=1` 跳过缓存 |
 
+新请求包含可选 `id`，用于并发完成时关联本轮；已有记录继续按原字段读取。成功轮次的时间标识在持久拥有者短锁内分配，同一宠物的并发轮次保持不同值。可选查询模型与主回复共用请求预算及保存入口；轮次结束后拒绝开启新的请求记录。
+
+New requests carry an optional `id` for concurrent turn association. Existing records retain their fields. The persistence owner allocates distinct per-pet turn timestamps inside its short lock. Optional query generation shares the request budget and recording entry, which rejects new attempts after the turn ends.
+
 `memory.json` 保留原有 `messages`，另以可选 `requests` 数组保存每次模型尝试：`version: 1`、毫秒 `time`、最终 `request`，以及成功后关联消息的 `turnTs`。请求包括 provider、model、调用身份、system、messages、temperature 和适用的 reasoningEffort；不包含凭据、请求头或 signal。请求先于模型调用写入，保存失败返回 `generate-error`，不继续回落。旧消息文件无需迁移，历史读取 API 仍只返回消息。
 
 按轮删除会同时移除该轮关联请求；其他轮的请求保留当时完整上下文，可能仍包含先前轮次。清空整只宠物会同时删除全部消息和请求，包括没有生成回复的失败尝试。记忆只保留在本机，不随配置同步。
