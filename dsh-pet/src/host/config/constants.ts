@@ -67,6 +67,7 @@ export const GLOBAL_DEFAULT_KEYS = [
   'chatMemoryRounds',
   'chatRequestLimitBytes',
   'memoryProvider',
+  'powercontext',
   'whisperModel',
   'chatModel',
   'eventsRefreshSec',
