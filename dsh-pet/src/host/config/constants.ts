@@ -66,6 +66,7 @@ export const GLOBAL_DEFAULT_KEYS = [
   'chatImageLimit',
   'chatMemoryRounds',
   'chatRequestLimitBytes',
+  'memoryProvider',
   'whisperModel',
   'chatModel',
   'eventsRefreshSec',
