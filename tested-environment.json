@@ -13,10 +13,10 @@
     "pnpm": "11.28.5"
   },
   "candidate": {
-    "pluginVersion": "0.4.9-fork.3",
+    "pluginVersion": "0.4.9-fork.4",
     "status": "Source Web candidate; actual browser and native Helper GUI acceptance remains paused",
-    "upstreamCommit": "ef174beecc79df76baf9ca06ed152237bbb96875",
-    "integration": "Six new upstream commits after the already-reviewed572cf0f base. Preserve the prior246 ASR fix and all maintained behavior. Merge multi-slot memory and PowerContext with owned registration, durable model requests, cancellation and unique per-pet turn identities; complete the existing foreground-browser draft.",
+    "upstreamCommit": "fb38ce620576f5ed3735a99536d2b1a4a9eb313f",
+    "integration": "Two incremental PowerContext commits after ef174bee. Preserve all prior maintained customizations and reviewed/cherry-picked history; parallel topic/atomic recall, shared evidence budget and source capture without internal pet IDs.",
     "coreCandidate": {
       "version": "0.2.2-rc.1",
       "commit": "54931fbd25050ef036e44b1daec931da2bfe7b39"
@@ -84,34 +84,32 @@
       "version": "0.2.2-rc.1",
       "commit": "54931fbd25050ef036e44b1daec931da2bfe7b39"
     },
+    "os": "Windows",
+    "arch": "x64",
     "node": "24.15.0",
     "npm": "11.12.1",
     "pnpm": "11.28.5",
-    "developmentTypeScript": "5.5.2",
-    "gitPrepareDeclarationTypeScript": "5.9.3",
+    "scope": "Only the changed PowerContext recall/capture behavior and necessary plugin JS/declarations; no GUI or external provider",
     "focusedBehaviorTests": {
-      "passed": 373,
+      "passed": 24,
       "failed": 0,
       "skipped": 0
     },
-    "helperVmTests": {
-      "passed": 7,
-      "failed": 0
-    },
-    "inMemoryNegativeControls": [
-      "wrong concurrent request association",
-      "same-clock turn identity collision",
-      "dispatch after canceled metadata lookup",
-      "missing owned PowerContext disposer"
-    ],
     "hostAndClientTypecheck": true,
     "testTypecheck": true,
-    "changedSourceAndHelperLint": true,
+    "pluginBuild": true,
+    "changedSourceLint": true,
     "actualGui": false,
     "formalInstall": false,
-    "normalGitNewCandidate": "Pending immutable Git/full-combination adoption by the maintenance owner",
     "actualModelRequests": 0,
-    "actualPowerContextService": false
+    "actualPowerContextService": false,
+    "normalGitNewCandidate": "Pending immutable Git/full-combination adoption by the maintenance owner",
+    "gitPrepareDeclarationTypeScript": "5.9.3",
+    "gitPrepareDeclarationNoEmit": true,
+    "inMemoryNegativeControls": [
+      "sequential search loses the topic evidence at the barrier",
+      "internal pet ID in captured source identity or metadata is rejected"
+    ]
   },
   "previousSourceValidation": {
     "core": {
@@ -157,5 +155,39 @@
     },
     "beforeFixRegressionFailures": 8,
     "normalGitDelivery": "New fixed source pending final published Git install; prior03bff normal Git delivery separately verified"
+  },
+  "previousValidationReused": {
+    "core": {
+      "version": "0.2.2-rc.1",
+      "commit": "54931fbd25050ef036e44b1daec931da2bfe7b39"
+    },
+    "node": "24.15.0",
+    "npm": "11.12.1",
+    "pnpm": "11.28.5",
+    "developmentTypeScript": "5.5.2",
+    "gitPrepareDeclarationTypeScript": "5.9.3",
+    "focusedBehaviorTests": {
+      "passed": 373,
+      "failed": 0,
+      "skipped": 0
+    },
+    "helperVmTests": {
+      "passed": 7,
+      "failed": 0
+    },
+    "inMemoryNegativeControls": [
+      "wrong concurrent request association",
+      "same-clock turn identity collision",
+      "dispatch after canceled metadata lookup",
+      "missing owned PowerContext disposer"
+    ],
+    "hostAndClientTypecheck": true,
+    "testTypecheck": true,
+    "changedSourceAndHelperLint": true,
+    "actualGui": false,
+    "formalInstall": false,
+    "normalGitNewCandidate": "Pending immutable Git/full-combination adoption by the maintenance owner",
+    "actualModelRequests": 0,
+    "actualPowerContextService": false
   }
 }

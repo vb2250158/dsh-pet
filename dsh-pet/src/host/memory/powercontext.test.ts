@@ -1,7 +1,7 @@
 /**
  * PowerContext 记忆实现的契约测试。
  *
- * 四条契约：
+ * 五条契约：
  *   1. 地址没配就不发任何请求，整轮不介入；
  *   2. scope 先查后建——已存在时不再 POST，不存在时按标题创建并用返回的 id 检索；
  *   3. 召回把命中拼成证据块前插到 userText，system 与 history 原样不动；没命中就返回 undefined；
@@ -51,6 +51,8 @@ interface Reply {
   json?: unknown;
   /** 延迟多久再答复（ms）；用来模拟检索那次远程向量化的耗时。 */
   delayMs?: number;
+  /** 两路请求都到达后才返回，用来验证并行派发。 */
+  after?: Promise<void>;
 }
 
 interface Stub {
@@ -79,7 +81,8 @@ async function startStub(handler: (req: Recorded) => Reply): Promise<Stub> {
         outgoing.writeHead(reply.status ?? 200, { 'content-type': 'application/json' });
         outgoing.end(JSON.stringify(reply.json ?? {}));
       };
-      if (reply.delayMs === undefined) send();
+      if (reply.after !== undefined) void reply.after.then(send);
+      else if (reply.delayMs === undefined) send();
       else setTimeout(send, reply.delayMs);
     });
   });
@@ -314,6 +317,73 @@ describe('PowerContext —— 召回', () => {
     }
   });
 
+  test('两路检索同时到达后才答复，且使用同一 scope 与 query', async () => {
+    let release!: () => void;
+    const both = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const searches: Recorded[] = [];
+    const stub = await startStub((req) => {
+      if (req.method === 'GET') return { json: { items: [{ scope_id: 'scp_1', title: 'dsh-pet:main' }] } };
+      searches.push(req);
+      if (searches.length === 2) release();
+      return {
+        after: both,
+        json: {
+          hits:
+            req.path === '/v1/topic-memory/search'
+              ? [{ title: '主题', summary: '概括' }]
+              : [{ memory: { kind: 'fact', text: '细节' } }],
+        },
+      };
+    });
+    try {
+      const provider = createPowerContextMemory({
+        endpoint: () => stub.endpoint,
+        token: () => '',
+        rewrite: async () => '统一查询',
+      });
+      const result = await provider.recall?.(recallRequest(), new AbortController().signal);
+      assert.ok(result?.userText.includes('主题：概括'));
+      assert.ok(result?.userText.includes('[fact] 细节'));
+      assert.deepEqual(
+        [...searches].sort((a, b) => a.path.localeCompare(b.path)).map(({ body }) => body),
+        [
+          { scope_id: 'scp_1', query: '统一查询', mode: 'hybrid', limit: 3 },
+          { scope_id: 'scp_1', query: '统一查询', limit: 2 },
+        ],
+      );
+    } finally {
+      release();
+      await stub.close();
+    }
+  });
+
+  test('原子检索失败时保留主题 snippet，忽略空主题并遵守 UTF-8 总预算', async () => {
+    const original = '原句';
+    const stub = await startStub((req) => {
+      if (req.method === 'GET') return { json: { items: [{ scope_id: 'scp_1', title: 'dsh-pet:main' }] } };
+      if (req.path === '/v1/atomic-memory/search') return { status: 500 };
+      return {
+        json: {
+          hits: [null, { title: '没有正文' }, { title: '  主题  ', summary: ' ', snippet: '保留片段🙂'.repeat(500) }],
+        },
+      };
+    });
+    try {
+      const provider = createPowerContextMemory({ endpoint: () => stub.endpoint, token: () => '' });
+      const result = await provider.recall?.(recallRequest(original), new AbortController().signal);
+      assert.ok(result);
+      const evidence = result.userText.slice(0, -('\n\n' + original).length);
+      assert.ok(evidence.includes('[主题记忆]\n- 主题：保留片段🙂'));
+      assert.ok(!evidence.includes('没有正文') && !evidence.includes('[原子记忆]'));
+      assert.ok(Buffer.byteLength(evidence, 'utf8') <= 3_072);
+      assert.ok(!evidence.includes('\ufffd'));
+    } finally {
+      await stub.close();
+    }
+  });
+
   test('没有命中 → 返回 undefined，不拿空证据块去污染提示词', async () => {
     const stub = await startStub(defaultHandler({ hits: [] }));
     try {
@@ -503,6 +573,33 @@ describe('PowerContext —— 召回', () => {
 
 describe('PowerContext —— 存储', () => {
   const turn: CaptureTurn = { petId: 'main', userText: '以后别放香菜', replyText: '记住啦', ts: 1_700_000_000_000 };
+
+  test('同毫秒的不同宠物使用独立 scope，素材不包含内部宠物 id', async () => {
+    const stub = await startStub((req) => {
+      if (req.method === 'GET') {
+        const title = new URL(req.path, 'http://fixture').searchParams.get('query');
+        return { json: { items: [{ scope_id: title === 'dsh-pet:internal-a' ? 'scope-a' : 'scope-b', title }] } };
+      }
+      return { status: 202, json: { status: 'accepted' } };
+    });
+    try {
+      const provider = createPowerContextMemory({ endpoint: () => stub.endpoint, token: () => '' });
+      await provider.capture?.({ ...turn, petId: 'internal-a' });
+      await provider.capture?.({ ...turn, petId: 'internal-b' });
+      const bodies = stub.requests.filter(({ path }) => path === '/v1/sources/content').map(({ body }) => body);
+      assert.deepEqual(
+        bodies,
+        ['scope-a', 'scope-b'].map((scope_id) => ({
+          scope_id,
+          source_id: 'dsh-pet:' + turn.ts,
+          content: '用户：' + turn.userText + '\n宠物：' + turn.replyText,
+        })),
+      );
+      assert.ok(!JSON.stringify(bodies).includes('internal-'));
+    } finally {
+      await stub.close();
+    }
+  });
 
   test('把这一轮问答写成一条证据，来源 id 可复现', async () => {
     const stub = await startStub((req) => {

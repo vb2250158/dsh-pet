@@ -1,3 +1,7 @@
+`0.4.9-fork.4` 合入上游两项 PowerContext 更新：并行检索主题与原子记忆，按层拼接并共用3072字节证据预算；一层失败时保留另一层。新素材只写 scope、轮次来源和问答，避免内部宠物 ID 被抽取成称呼；既有服务端记忆不回溯修改。保留本地持久请求、取消、独立 scope、注册释放及前台浏览器功能。正式仍为 `0.4.5-fork.12`，实际 GUI 与新固定 Git 组合待维护拥有者验收。
+
+`0.4.9-fork.4` integrates two upstream PowerContext changes: parallel topic and atomic recall under one 3072-byte evidence budget, with independent partial failure. New captured content omits internal pet IDs while retaining per-scope turn identity; existing server memories are unchanged. Maintained durable requests, cancellation, registration ownership and foreground-browser behavior remain. Formal Pet remains `0.4.5-fork.12`; actual GUI and immutable-Git combination acceptance are pending.
+
 `0.4.9-fork.3` 按提交合入上游六项记忆实现、PowerContext、拖拽弹簧和设置布局更新，保留现有助手、语音、显示租约与请求预算。召回和生成在文件锁外执行，实际模型请求经短锁先保存；并发同毫秒完成的轮次具有独立时间标识，消息、请求与记忆接收保持同一轮次。可选查询改写共用持久请求入口和取消信号，超时后停止开启查询模型请求。正式仍为 `0.4.5-fork.12`，实际 GUI 与新固定 Git 组合待验收。
 
 `0.4.9-fork.3` integrates six upstream memory, PowerContext, drag-spring and settings changes. Durable request recording retains its byte budget and per-turn ownership across concurrent completions. Optional query rewriting shares the request owner and cancellation signal. The formal Pet version remains `0.4.5-fork.12`; current GUI and immutable-Git combination acceptance are pending.
