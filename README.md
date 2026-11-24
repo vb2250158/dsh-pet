@@ -406,6 +406,11 @@ AI 提示词 → 绿幕视频 → 透明动画 → 插件，换角色、换动�
 └── LICENSE             # MIT
 ```
 
+## 相关项目
+
+- [上游数据看板](https://pet.lxpavilion.top) 由原仓库部署。
+- [aipets](https://github.com/kallen-noelle/aipets) 是另一款桌面宠物项目，支持多角色和模型驱动动作。
+
 ## 💬 反馈与发版节奏
 
 欢迎提 [issue](https://github.com/PC2005-cloud/dsh-pet/issues) 与 PR——bug、体验问题随时反馈。**新功能请先开 issue** 说明使用场景，确认后再动手，不要在确认前直接提交实现 PR。这个插件专注桌宠与 DSH 本身，偏离太远的需求一般不会做。动手前也请先翻一眼 [提交记录](https://github.com/PC2005-cloud/dsh-pet/commits/main)，确认不是已经修掉的同款问题（有些问题可能已经在 `main` 上修好了，只是还没发版）。

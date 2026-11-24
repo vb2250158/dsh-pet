@@ -1,5 +1,9 @@
 # 0.4.9-fork.4
 
+同步上游已审查的历史，补入独立设置页的对话翻译适配。上游指标看板保留源码，自动发布仅在原仓库运行。
+
+Reconcile the reviewed upstream history and restore the standalone settings chat translator. The metrics site deployment runs in the original repository.
+
 `0.4.9-fork.4` 合入上游两项 PowerContext 更新：并行检索主题与原子记忆，按层拼接并共用3072字节证据预算；一层失败时保留另一层。新素材只写 scope、轮次来源和问答，避免内部宠物 ID 被抽取成称呼；既有服务端记忆不回溯修改。保留本地持久请求、取消、独立 scope、注册释放及前台浏览器功能。正式仍为 `0.4.5-fork.12`，实际 GUI 与新固定 Git 组合待维护拥有者验收。
 
 `0.4.9-fork.4` integrates two upstream PowerContext changes: parallel topic and atomic recall under one 3072-byte evidence budget, with independent partial failure. New captured content omits internal pet IDs while retaining per-scope turn identity; existing server memories are unchanged. Maintained durable requests, cancellation, registration ownership and foreground-browser behavior remain. Formal Pet remains `0.4.5-fork.12`; actual GUI and immutable-Git combination acceptance are pending.
